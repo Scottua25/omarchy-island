@@ -1440,6 +1440,17 @@ ShellRoot {
           }
 
         }
+      }
+
+      // Keep the line above the pill and indicator backgrounds. The renderer
+      // has no pointer handlers, so the controls beneath it remain clickable.
+      Item {
+        id: attachedBorderOverlay
+        z: 50
+        x: 0; y: root.bottomEdge ? win.height - height : 0
+        width: win.width; height: attachedOutline.height
+        visible: win.notchDrawn
+        transform: Scale { origin.y: attachedBorderOverlay.height / 2; yScale: root.bottomEdge ? -1 : 1 }
         IslandBorder {
           x: attachedOutline.leftEdge; y: 0
           width: attachedOutline.rightEdge - attachedOutline.leftEdge; height: attachedOutline.depth
