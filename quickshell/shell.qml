@@ -195,7 +195,32 @@ ShellRoot {
     root.pendingArgv = argv
     afterCollapse.restart()
   }
-  function openPanel(id) { root.later(["omarchy-shell", "shell", "toggle", id]) }
+  // Publish the dashboard's current screen geometry before summoning a panel.
+  // Its existing morph animation can then start at the dashboard rather than
+  // at the idle clock. Keep the dashboard visible until the panel takes over.
+  property rect dashboardRect: Qt.rect(0, 0, 0, 0)
+  property rect panelOrigin: Qt.rect(0, 0, 0, 0)
+  property bool panelHandoff: false
+  property var panelCommand: []
+  Timer {
+    id: panelLaunchTimer
+    interval: 100
+    onTriggered: { const a = root.panelCommand; root.panelCommand = []; if (a.length) Quickshell.execDetached(a) }
+  }
+  Timer { id: panelHandoffTimeout; interval: 3000; onTriggered: root.panelHandoff = false }
+  Timer { id: panelOriginReset; interval: 700; onTriggered: root.panelHandoff = false }
+  function launchPanel(argv) {
+    if (root.mode !== "dash" || root.dashboardRect.width <= 0 || root.panelHandoff) {
+      if (!root.panelHandoff) root.later(argv)
+      return
+    }
+    root.panelOrigin = root.dashboardRect
+    root.panelCommand = argv
+    root.panelHandoff = true
+    panelHandoffTimeout.restart()
+    panelLaunchTimer.restart()
+  }
+  function openPanel(id) { root.launchPanel(["omarchy-shell", "shell", "toggle", id]) }
   function run(argv) { root.later(argv) }
   function toggleCaffeine() {
     root.stayAwake = !root.stayAwake          // immediately; the poll confirms it later
@@ -204,7 +229,7 @@ ShellRoot {
   }
   function toggleRecording() {
     if (root.recording) Quickshell.execDetached(["omarchy-capture-screenrecording", "--stop-recording"])
-    else root.run(["omarchy-menu", "toggle", "trigger.capture.screenrecord"])
+    else root.launchPanel(["omarchy-menu", "toggle", "trigger.capture.screenrecord"])
     pollSoon.restart()
   }
   function toggleDnd() {
@@ -778,7 +803,10 @@ ShellRoot {
       root.menuW = Math.max(120, Number(w) || 300)
       root.menuH = Math.max(30, Number(h) || 200)
       root.menuOpen = state === "open"
-      if (root.menuOpen) root.pinned = false
+      if (root.menuOpen) {
+        root.pinned = false
+        if (root.panelHandoff) { panelHandoffTimeout.stop(); panelOriginReset.restart() }
+      }
       return "ok"
     }
   }
@@ -1154,14 +1182,22 @@ ShellRoot {
       }
       Binding { target: root; property: "shotTargetRadius"; when: !!win.hyprMonitor && win.hyprMonitor.focused; value: win.thumbH / 2 }
 
-      // Idle pill geometry, for the menu that takes on its shape.
-      readonly property string pillGeometry: JSON.stringify({ w: Math.round(win.idleWidth), h: root.idleHeight, x: Math.round(win.desiredCenter - win.idleWidth / 2), y: root.bottomEdge ? win.height - (root.atCorner ? 0 : root.pillTop) - root.idleHeight : (root.atCorner ? 0 : root.pillTop), position: root.position, borderWidth: root.hyprBorderWidth, borderRadius: root.hyprRounding, borderColors: root.activeBorderColors, borderAngle: root.activeBorderAngle })
-      onPillGeometryChanged: pillFile.setText(pillGeometry)
+      // The focused screen publishes either the idle pill or the captured
+      // dashboard rectangle during a panel handoff.
+      Binding {
+        target: root; property: "dashboardRect"
+        when: root.mode === "dash" && !!win.hyprMonitor && win.hyprMonitor.focused
+        value: Qt.rect(pill.x, pill.y, pill.width, pill.height)
+      }
+      readonly property bool publishGeometry: !win.hyprMonitor || win.hyprMonitor.focused
+      readonly property string pillGeometry: JSON.stringify({ w: Math.round(root.panelHandoff ? root.panelOrigin.width : win.idleWidth), h: Math.round(root.panelHandoff ? root.panelOrigin.height : root.idleHeight), x: Math.round(root.panelHandoff ? root.panelOrigin.x : win.desiredCenter - win.idleWidth / 2), y: Math.round(root.panelHandoff ? root.panelOrigin.y : (root.bottomEdge ? win.height - (root.atCorner ? 0 : root.pillTop) - root.idleHeight : (root.atCorner ? 0 : root.pillTop))), position: root.position, borderWidth: root.hyprBorderWidth, borderRadius: root.hyprRounding, borderColors: root.activeBorderColors, borderAngle: root.activeBorderAngle })
+      onPillGeometryChanged: if (publishGeometry) pillFile.setText(pillGeometry)
+      onPublishGeometryChanged: if (publishGeometry) pillFile.setText(pillGeometry)
       FileView {
         id: pillFile
         path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/island-pill.json"
         printErrors: false
-        Component.onCompleted: setText(win.pillGeometry)
+        Component.onCompleted: if (win.publishGeometry) setText(win.pillGeometry)
       }
 
       RectangularShadow {
@@ -1512,7 +1548,7 @@ ShellRoot {
 
         HoverHandler { id: pillHover; onHoveredChanged: win.hoverChanged() }
         // The dashboard closes on its own when the mouse leaves.
-        Timer { id: collapseTimer; interval: 450; onTriggered: { root.pinned = false; root.centerOpen = false } }
+        Timer { id: collapseTimer; interval: 450; onTriggered: if (!root.panelHandoff) { root.pinned = false; root.centerOpen = false } }
 
         TapHandler {
           // Click on the idle pill: opens the dashboard. On the OSD: closes it.

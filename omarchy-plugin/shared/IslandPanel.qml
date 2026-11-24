@@ -432,8 +432,8 @@ PanelWindow {
 
   function morphFromPill() {
     morphFrom = pillRect
-    morphRun.easing.type = Easing.OutBack
-    morphRun.duration = Style.duration(440)
+    morphRun.easing.type = Easing.OutCubic
+    morphRun.duration = Style.duration(220)
     morphRun.restart()
   }
 

@@ -181,8 +181,8 @@ Item {
     id: openAnim
     target: root; property: "morph"
     from: 0; to: 1
-    duration: Style.duration(460)
-    easing.type: Easing.OutBack; easing.overshoot: 1.15
+    duration: Style.duration(220)
+    easing.type: Easing.OutCubic
   }
   NumberAnimation {
     id: closeAnim
