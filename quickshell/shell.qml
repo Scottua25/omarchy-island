@@ -1177,11 +1177,14 @@ ShellRoot {
         readonly property real notchRestX: root.horizontalPosition === "right" ? win.pillCenter - win.restWidth * win.notchScale / 2 - 6 * win.notchScale - width * (1 + win.notchScale) / 2 : win.pillCenter + win.restWidth * win.notchScale / 2 + 6 * win.notchScale - width * (1 - win.notchScale) / 2
         readonly property real notchY: win.notchTop - height * (1 - win.notchScale) / 2
         y: root.bottomEdge ? win.height - height - (docked ? root.pillTop + 30 - height / 2 : notched ? notchY : root.pillTop) : (docked ? root.pillTop + 30 - height / 2 : notched ? notchY : root.pillTop)
-        x: docked ? dockX - width / 2 : shown ? (notched ? notchRestX : restX) : idleRight - width
+        // Follow the pill's moving center directly while animating only the
+        // satellite's offset. This avoids restarting the animation each frame.
+        property real centerOffset: (docked ? dockX - width / 2 : shown ? (notched ? notchRestX : restX) : idleRight - width) - win.pillCenter
+        x: win.pillCenter + centerOffset
         scale: docked ? 44 / root.idleHeight : shown ? (notched ? win.notchScale : 1) : 0.4
         opacity: shown || docked ? 1 : 0
         color: docked ? root.accent : root.pillColor
-        Behavior on x { enabled: root.animate; SpringAnimation { spring: 3.4; damping: 0.3; epsilon: 0.3 } }
+        Behavior on centerOffset { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         Behavior on y { enabled: root.animate; SpringAnimation { spring: 3.4; damping: 0.3; epsilon: 0.3 } }
         Behavior on scale { enabled: root.animate; SpringAnimation { spring: 3.4; damping: 0.3; epsilon: 0.01 } }
         Behavior on opacity { enabled: root.animate; NumberAnimation { duration: 160 } }
@@ -1569,8 +1572,8 @@ ShellRoot {
         opacity: (root.mode === "menu" ? 0 : 1) * Math.min(1, win.revealT * 1.6)
         Behavior on opacity { enabled: root.animate && win.revealT >= 1; NumberAnimation { duration: root.mode === "menu" ? 90 : 0 } }
 
-        Behavior on width  { SpringAnimation { spring: 3.2; damping: 0.28; epsilon: 0.3 } }
-        Behavior on height { enabled: root.animate; SpringAnimation { spring: 3.2; damping: 0.32; epsilon: 0.3 } }
+        Behavior on width  { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on height { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         Behavior on radius { enabled: root.animate; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
         HoverHandler {
@@ -1931,22 +1934,24 @@ ShellRoot {
           font.weight: Font.Bold
           font.features: { "tnum": 1 }
           transformOrigin: Item.TopLeft
-          // Targets in window coordinates.
-          readonly property real ax: win.pillCenter - idleRow.implicitWidth / 2 + idleTime.x + (idleTime.width - implicitWidth * s0) / 2
+          // Animate offsets from the pill's center. Its center moves on every
+          // frame in a corner, so animating screen coordinates chases a moving
+          // target and makes the clock lag or jump during the resize.
+          readonly property real ax: -idleRow.implicitWidth / 2 + idleTime.x + (idleTime.width - implicitWidth * s0) / 2
           readonly property real ay: (root.idleHeight - implicitHeight * s0) / 2
-          readonly property real bx: win.pillCenter - 480 / 2 + 18 + dashHeaderCol.x
+          readonly property real bx: -480 / 2 + 18 + dashHeaderCol.x
           readonly property real by: 18 + dashHeaderCol.y
-          readonly property real qx: win.pillCenter - quickFull.implicitWidth / 2 + quickFull.clockX - (implicitWidth * sq - quickFull.clockW) / 2
+          readonly property real qx: -quickFull.implicitWidth / 2 + quickFull.clockX - (implicitWidth * sq - quickFull.clockW) / 2
           readonly property real qy: (60 - implicitHeight * sq) / 2
           readonly property string spot: root.mode === "dash" ? "dash" : root.mode === "quick" ? "quick" : "idle"
           property real wx: spot === "dash" ? bx : spot === "quick" ? qx : ax
           property real wy: spot === "dash" ? by : spot === "quick" ? qy : ay
           property real sc: spot === "dash" ? 1 : spot === "quick" ? sq : s0
-          Behavior on wx { enabled: root.animate; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-          Behavior on wy { enabled: root.animate; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-          Behavior on sc { enabled: root.animate; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
+          Behavior on wx { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+          Behavior on wy { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+          Behavior on sc { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
           scale: sc
-          x: wx - pill.x
+          x: pill.width / 2 + wx
           y: wy
           opacity: shown ? 1 : 0
           visible: opacity > 0 && (win.calm || spot !== "idle")
@@ -1968,10 +1973,10 @@ ShellRoot {
             const e = p.desktopEntry ? DesktopEntries.byId(p.desktopEntry) : null
             return Quickshell.iconPath((e && e.icon) || p.desktopEntry || "", true)
           }
-          // Targets in window coordinates, animated: straight path.
-          readonly property real tx: root.mode === "dash" ? win.pillCenter - 480 / 2 + 18 + cc.x + cc.artX
-                                   : root.mode === "player" ? win.pillCenter - (420 + 112) / 2 + 8
-                                   : win.pillCenter - idleRow.implicitWidth / 2
+          // Offsets from the moving pill center, as with the clock above.
+          readonly property real tx: root.mode === "dash" ? -480 / 2 + 18 + cc.x + cc.artX
+                                   : root.mode === "player" ? -(420 + 112) / 2 + 8
+                                   : -idleRow.implicitWidth / 2
           readonly property real ty: root.mode === "dash" ? 18 + cc.y + cc.artY
                                    : root.mode === "player" ? 8
                                    : (root.idleHeight - 18) / 2
@@ -1981,11 +1986,11 @@ ShellRoot {
           property real wy: ty
           property real size: tsize
           property real rad: tradius
-          Behavior on wx { enabled: root.animate; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-          Behavior on wy { enabled: root.animate; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-          Behavior on size { enabled: root.animate; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-          Behavior on rad { enabled: root.animate; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-          x: wx - pill.x
+          Behavior on wx { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+          Behavior on wy { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+          Behavior on size { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+          Behavior on rad { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+          x: pill.width / 2 + wx
           y: wy
           width: size; height: size
           opacity: shown ? 1 : 0
@@ -2152,11 +2157,7 @@ ShellRoot {
           opacity: root.mode === "quick" ? 1 : 0
           visible: opacity > 0
           enabled: root.mode === "quick"
-          // Transition: outgoing content vanishes and shrinks at once; incoming
-          // content waits for the pill to start reshaping, then springs in.
-          Behavior on opacity { id: fadeIn7; enabled: root.animate; NumberAnimation { duration: fadeIn7.targetValue > 0.5 ? 300 : 90; easing.type: fadeIn7.targetValue > 0.5 ? Easing.InOutCubic : Easing.OutQuad } }
-          scale: root.mode === "quick" ? 1 : 0.92
-          Behavior on scale { id: grow7; enabled: root.animate; NumberAnimation { duration: grow7.targetValue > 0.96 ? 420 : 120; easing.type: grow7.targetValue > 0.96 ? Easing.OutBack : Easing.InQuad; easing.overshoot: 1.3 } }
+          Behavior on opacity { id: fadeIn7; enabled: root.animate; NumberAnimation { duration: fadeIn7.targetValue > 0.5 ? 180 : 120; easing.type: Easing.OutCubic } }
           pct: root.batPct; charging: root.charging; hasBattery: root.hasBattery
           stayAwake: root.stayAwake; dnd: root.dnd
           accent: root.accent; textColor: root.textColor; red: root.red; green: root.green
