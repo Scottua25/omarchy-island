@@ -1,24 +1,33 @@
 <h1 align="center">omarchy-island</h1>
 
 <p align="center"><b>A dynamic island for <a href="https://omarchy.org">Omarchy</a>.</b><br>
-The bar becomes a single pill at the top of the screen that grows into whatever is happening:<br>
+The bar becomes a single island that grows into whatever is happening:<br>
 music, notifications, volume, a control center, your screenshots, a shelf for files.</p>
+
+> **This is an independently maintained fork**, not the original project.
+> The original is [Liukskywalkerr/omarchy-island](https://github.com/Liukskywalkerr/omarchy-island).
+> This fork adds configurable screen positions, clock and notch settings,
+> Hyprland-matched borders, and changes to panel and hover behavior. Changes to
+> the original repository are not automatically applied to this fork.
 
 <p align="center"><img src="docs/media/hero.webp" alt="omarchy-island: hover for quick actions, click for the control center" width="860"></p>
 
-<p align="center">🎬 <a href="https://github.com/Liukskywalkerr/omarchy-island/releases/download/v1.0.0/omarchy-island-tour.mp4"><b>Watch the 3-minute tour</b></a> · <a href="https://github.com/Liukskywalkerr/omarchy-island/releases/download/v1.0.0/omarchy-island-short.mp4">20-second short</a></p>
+<p align="center">🎬 Original project: <a href="https://github.com/Liukskywalkerr/omarchy-island/releases/download/v1.0.0/omarchy-island-tour.mp4"><b>3-minute tour</b></a> · <a href="https://github.com/Liukskywalkerr/omarchy-island/releases/download/v1.0.0/omarchy-island-short.mp4">20-second short</a></p>
+
+The images and videos show the original project; some layouts and behavior in
+this fork differ.
 
 ## What it does
 
 | | |
 |---|---|
-| **At rest** | Just the time. Things that are *on* appear beside it as small satellites — caffeine, Do Not Disturb, a shelf with files, low battery — and the pill grows little "ears" for music, recording, timers and the mic/camera privacy dots. |
-| **Hover** | Quick actions: battery ring, screenshot, caffeine, Do Not Disturb. The clock and the satellites don't fade out — they *move* into place. |
-| **Click** | The control center: Wi-Fi, Bluetooth, now playing, brightness and volume sliders, and every Omarchy panel one tap away. |
+| **At rest** | The time and active indicators, including caffeine and Do Not Disturb, with space for music, recording, timers and microphone/camera privacy indicators. In a corner, the indicators sit beside the clock toward the screen's center. |
+| **Hover** | Quick actions for power, screenshots, caffeine and Do Not Disturb, or a compact player when media is available. In a corner, the full quick-action order from the screen edge is time, caffeine, Do Not Disturb, screenshot, power. Center positions keep the original order. |
+| **Click** | The control center: Wi-Fi, Bluetooth, now playing, brightness and volume sliders, and Omarchy panels one tap away. Selected panels animate directly from the open control center. |
 | **Notifications** | They live in the island, with their action buttons, grouped per app. Screenshots fly into the pill with a soft *bloop* and stay draggable. |
 | **OSD** | Volume, brightness and every `omarchy osd` message. |
 | **Shelf** | Drag files onto the pill, collect as many as you like, drag them all out at once (uses [OmaDrop](https://github.com/lucascnunes/omadrop)). |
-| **Notch mode** | With a browser, or the gap between two windows, under the pill, the windows go all the way up and the pill sits in a notch cut into the window border. A terminal under the pill keeps the strip. |
+| **Position and notch** | Choose the left corner, center or right corner of either screen edge. By default, tiled windows can reach the edge beneath the island; the notch follows the window border and includes active caffeine and Do Not Disturb indicators. |
 
 Scroll on the pill for volume (<kbd>Shift</kbd> for brightness), middle-click to play/pause.
 
@@ -35,10 +44,12 @@ Scroll on the pill for volume (<kbd>Shift</kbd> for brightness), middle-click to
 
 ## Install
 
-Requires **Omarchy 4.5 or newer** (the Quickshell-based shell).
+Requires **Omarchy 4.5 or newer** (the Quickshell-based shell) and **Qt 6.12
+or newer** for the gradient border renderer. Run the installer from an active
+Omarchy desktop session.
 
 ```bash
-    git clone https://github.com/Scottua25/omarchy-island ~/.local/share/omarchy-island
+git clone https://github.com/Scottua25/omarchy-island ~/.local/share/omarchy-island
 ~/.local/share/omarchy-island/install.sh
 ```
 
@@ -47,17 +58,26 @@ The installer clones the Omarchy plugins the island takes over with
 island's changes, installs a systemd user service and an Omarchy post-update
 hook. Your `shell.json` is backed up first.
 
-**Uninstall** — everything goes back the way it was:
+**Uninstall** — removes the island service and installer-created clones and
+restores the saved shell configuration:
 
 ```bash
 ~/.local/share/omarchy-island/uninstall.sh
 ```
 
-**Update**
+Pre-existing plugin clones are kept and may retain island styling. The separate
+island settings file is also kept. Use `uninstall.sh --keep-config` to retain
+the current shell configuration instead of restoring the backup.
+
+**Update this fork**
 
 ```bash
 cd ~/.local/share/omarchy-island && git pull && ./install.sh
 ```
+
+This updates from the checkout's configured Git remote. A checkout made with
+the clone command above tracks this fork; changes from the original project
+must be incorporated separately.
 
 ### Optional
 
@@ -70,13 +90,14 @@ cd ~/.local/share/omarchy-island && git pull && ./install.sh
 - **Three-finger gestures** for the dashboard and Mirador: see
   [`extras/island-gesture`](extras/island-gesture).
 
-## Surviving Omarchy updates
+## Omarchy updates
 
 The island never edits Omarchy's own files. The panels it restyles are
 clones, and after every `omarchy update` (and every time the island starts)
 `tools/island-sync` rebuilds them from the new Omarchy version with a
-three-way merge of the island's changes. Omarchy's fixes keep flowing in. If a
-change can't be applied any more, that panel falls back to Omarchy's version and
+three-way merge of the island's changes. This brings in changes to the installed
+Omarchy plugins; it does not pull changes from the original island repository.
+If a change can't be applied, that panel falls back to Omarchy's version and
 you get a notification. If the island itself fails to start, the regular
 Omarchy bar comes back on its own.
 
@@ -89,9 +110,11 @@ qs -c island ipc call island toggle              # open/close the control center
 qs -c island ipc call island test notify         # also: volume, brightness, shelf, ws, shot:<png>
 ```
 
-### Island settings
+## Settings
 
-Create `~/.config/omarchy-island/settings.json` to customize the clock and notch. Changes reload on save:
+Create `~/.config/omarchy-island/settings.json` to customize the island. Create
+the `~/.config/omarchy-island/` directory first if needed. Changes reload on
+save; restarting the service is not normally necessary:
 
 ```json
 {
@@ -102,19 +125,30 @@ Create `~/.config/omarchy-island/settings.json` to customize the clock and notch
 }
 ```
 
-- `clockFormat`: Qt time format, for example `h:mm AP` for 12-hour time or `HH:mm` for 24-hour time.
-- `notchScale`: notch size relative to the normal pill; values are limited to 0.5–1.0.
-- `notchMode`: `all` allows tiled windows to reach the top (the island may cover content); `browser` uses the original browser and window-gap behavior; `off` reserves space for the island. `ISLAND_NOTCH=off` takes precedence.
-- `position`: `top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, or `bottom-right`. Bottom positions can overlap a bottom dock.
+- `clockFormat`: a Qt time format, such as `h:mm AP` for 12-hour time with
+  AM/PM or `HH:mm` for 24-hour time.
+- `notchScale`: the notch size relative to the normal island, from `0.5` to
+  `1.0`. The default is `0.95`.
+- `notchMode`: `all` allows tiled windows to reach the island's screen edge,
+  including terminals; the island may cover content. `browser` uses the
+  original browser and window-gap rule. `off` reserves space for the island.
+  `ISLAND_NOTCH=off` overrides this setting.
+- `position`: `top-left`, `top-center`, `top-right`, `bottom-left`,
+  `bottom-center`, or `bottom-right`. The default is `top-center`; bottom
+  positions can overlap a bottom dock.
 
-The values above are also the defaults if the file is absent. Invalid JSON leaves the last valid settings active. This file is separate from the checkout and survives updates.
+The values above are the defaults when the file is absent or a setting is
+missing. The file must be valid JSON: use double quotes and no trailing commas.
+Invalid JSON leaves the last valid settings active. The settings file is
+separate from the checkout and survives updates.
 
 ### Borders
 
-The island and its flyouts read Hyprland's active/inactive border colors,
-gradient angle, border width and rounding, and refresh them after Hyprland
-configuration or theme changes. Screen-attached edges keep their square shape.
-The gradient border renderer uses Qt 6.12 or newer.
+The island and its flyouts use Hyprland's border colors, gradient, width and
+rounding, and refresh them after Hyprland configuration or theme changes.
+Screen-attached edges stay square; the corners facing the screen's interior
+follow the configured rounding. The outline expands to include active caffeine
+and Do Not Disturb indicators.
 
 ### Environment options
 
@@ -125,6 +159,8 @@ Set them in a drop-in (`systemctl --user edit omarchy-island`, `[Service]` → `
 | `ISLAND_PLAYERS=spotify\|mpv` | only these media players (regex on D-Bus name / identity) |
 | `ISLAND_CAM_IGNORE="ffmpeg my-cam*"` | processes that don't count as "camera in use" (virtual-camera pipelines) |
 | `ISLAND_DEMO=1` | generic Wi-Fi and Bluetooth names, for screen recordings |
+| `ISLAND_NOTCH=off` | disable the notch, overriding `notchMode` |
+| `ISLAND_HIDE=tiled` | hide the resting island for a single browser or two or more tiled windows; it can still appear for actions and notifications |
 
 The island follows your Omarchy theme and the `animations` toggle, and speaks
 English or Italian depending on your locale — more languages welcome in
@@ -136,6 +172,7 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits & license
 
-Built on [Omarchy](https://github.com/basecamp/omarchy) and
-[Quickshell](https://quickshell.org); see [CREDITS.md](CREDITS.md).
-MIT licensed.
+Forked from [Liukskywalkerr/omarchy-island](https://github.com/Liukskywalkerr/omarchy-island),
+which is built on [Omarchy](https://github.com/basecamp/omarchy) and
+[Quickshell](https://quickshell.org). See [CREDITS.md](CREDITS.md) for the
+original project's acknowledgments and [LICENSE](LICENSE) for the MIT license.
