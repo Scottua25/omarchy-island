@@ -1494,13 +1494,31 @@ ShellRoot {
         width: win.width; height: 90
         visible: root.atCorner && win.notchDrawn
         transform: Scale { origin.x: cornerOutline.width / 2; origin.y: cornerOutline.height / 2; xScale: root.atRight ? -1 : 1; yScale: root.bottomEdge ? -1 : 1 }
-        readonly property real outerW: pill.width * pill.scale + 5
-        readonly property real outerH: pill.height * pill.scale + 5
+        // Put the stroke directly against the visible pill. The opaque fill
+        // covers the window's original border beneath the replacement outline.
+        readonly property real outerW: pill.width * pill.scale + 0.5
+        readonly property real outerH: pill.height * pill.scale + 0.5
         readonly property real edge: root.gapsOut
         readonly property real curve: Math.max(2, Math.min(12, (outerH - edge) / 2))
+        readonly property real innerCurve: Math.min(pill.radius * pill.scale, outerH - edge)
         Shape {
           anchors.fill: parent
           preferredRendererType: Shape.CurveRenderer
+          // Fill the area behind the island and its corner joins, hiding the
+          // compositor's original window border before drawing the new one.
+          ShapePath {
+            strokeWidth: -1
+            fillColor: root.pillColor
+            startX: cornerOutline.outerW + cornerOutline.curve; startY: cornerOutline.edge
+            PathQuad { x: cornerOutline.outerW; y: cornerOutline.edge + cornerOutline.curve; controlX: cornerOutline.outerW; controlY: cornerOutline.edge }
+            PathLine { x: cornerOutline.outerW; y: cornerOutline.outerH - cornerOutline.innerCurve }
+            PathQuad { x: cornerOutline.outerW - cornerOutline.innerCurve; y: cornerOutline.outerH; controlX: cornerOutline.outerW; controlY: cornerOutline.outerH }
+            PathLine { x: cornerOutline.edge + cornerOutline.curve; y: cornerOutline.outerH }
+            PathQuad { x: cornerOutline.edge; y: cornerOutline.outerH + cornerOutline.curve; controlX: cornerOutline.edge; controlY: cornerOutline.outerH }
+            PathLine { x: 0; y: cornerOutline.outerH + cornerOutline.curve }
+            PathLine { x: 0; y: 0 }
+            PathLine { x: cornerOutline.outerW + cornerOutline.curve; y: 0 }
+          }
           ShapePath {
             strokeWidth: 2
             strokeColor: win.centerFocused ? root.borderColor : root.inactiveBorderColor
@@ -1508,8 +1526,8 @@ ShellRoot {
             capStyle: ShapePath.FlatCap
             startX: cornerOutline.outerW + cornerOutline.curve; startY: cornerOutline.edge
             PathQuad { x: cornerOutline.outerW; y: cornerOutline.edge + cornerOutline.curve; controlX: cornerOutline.outerW; controlY: cornerOutline.edge }
-            PathLine { x: cornerOutline.outerW; y: cornerOutline.outerH - cornerOutline.curve }
-            PathQuad { x: cornerOutline.outerW - cornerOutline.curve; y: cornerOutline.outerH; controlX: cornerOutline.outerW; controlY: cornerOutline.outerH }
+            PathLine { x: cornerOutline.outerW; y: cornerOutline.outerH - cornerOutline.innerCurve }
+            PathQuad { x: cornerOutline.outerW - cornerOutline.innerCurve; y: cornerOutline.outerH; controlX: cornerOutline.outerW; controlY: cornerOutline.outerH }
             PathLine { x: cornerOutline.edge + cornerOutline.curve; y: cornerOutline.outerH }
             PathQuad { x: cornerOutline.edge; y: cornerOutline.outerH + cornerOutline.curve; controlX: cornerOutline.edge; controlY: cornerOutline.outerH }
           }
