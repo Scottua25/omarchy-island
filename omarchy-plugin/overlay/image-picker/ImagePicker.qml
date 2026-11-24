@@ -67,7 +67,10 @@ Item {
   readonly property int thumbRadius: 18
   readonly property string islandFont: "SF Pro Display"
   readonly property int islandTop: 7
-  readonly property int islandRadius: 34
+  property real islandRadius: 6
+  property real islandBorderWidth: 2
+  property var islandBorderColors: ["#ff777777"]
+  property real islandBorderAngle: 0
   readonly property int islandWidth: Math.min(panel.width - 120, 1060)
   readonly property int islandPad: 20
   property int bottomChromeHeight: showLabels ? (filterable ? 66 : 40) : (filterable ? 30 : 0)
@@ -100,6 +103,10 @@ Item {
         root.pillX = typeof g.x === "number" ? g.x : -1
         root.islandPosition = typeof g.position === "string" ? g.position : "top-center"
         root.islandBottom = root.islandPosition.startsWith("bottom-")
+        if (typeof g.borderWidth === "number") root.islandBorderWidth = Math.max(0, g.borderWidth)
+        if (typeof g.borderRadius === "number") root.islandRadius = Math.max(0, g.borderRadius)
+        if (Array.isArray(g.borderColors) && g.borderColors.length) root.islandBorderColors = g.borderColors
+        if (typeof g.borderAngle === "number") root.islandBorderAngle = g.borderAngle
       } catch (e) {}
     }
   }
@@ -764,6 +771,11 @@ Item {
         id: islandShape
         anchors.fill: parent
         color: Commons.Color.background
+    IslandBorder {
+      attached: root.islandCorner; position: root.islandPosition
+      borderWidth: root.islandBorderWidth; rounding: root.islandRadius
+      colors: root.islandBorderColors; angle: root.islandBorderAngle
+    }
         radius: Math.min(height / 2, root.pillH / 2 + (root.islandRadius - root.pillH / 2) * Math.min(1, Math.max(0, root.morph)))
     topLeftRadius: root.islandCorner && !(root.islandBottom && root.islandRight) ? 0 : radius
     topRightRadius: root.islandCorner && !(root.islandBottom && !root.islandRight) ? 0 : radius

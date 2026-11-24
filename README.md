@@ -109,6 +109,13 @@ Create `~/.config/omarchy-island/settings.json` to customize the clock and notch
 
 The values above are also the defaults if the file is absent. Invalid JSON leaves the last valid settings active. This file is separate from the checkout and survives updates.
 
+### Borders
+
+The island and its flyouts read Hyprland's active/inactive border colors,
+gradient angle, border width and rounding, and refresh them after Hyprland
+configuration or theme changes. Screen-attached edges keep their square shape.
+The gradient border renderer uses Qt 6.12 or newer.
+
 ### Environment options
 
 Set them in a drop-in (`systemctl --user edit omarchy-island`, `[Service]` → `Environment=…`):

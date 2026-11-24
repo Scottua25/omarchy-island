@@ -48,7 +48,10 @@ PanelWindow {
   id: root
 
   readonly property int islandTop: 7
-  readonly property int islandRadius: 32
+  property real islandRadius: 6
+  property real islandBorderWidth: 2
+  property var islandBorderColors: ["#ff777777"]
+  property real islandBorderAngle: 0
   property real pillW: 200
   property real pillH: 30
   property real pillY: 7
@@ -72,6 +75,10 @@ PanelWindow {
         root.pillX = typeof g.x === "number" ? g.x : -1
         root.islandPosition = typeof g.position === "string" ? g.position : "top-center"
         root.islandBottom = root.islandPosition.startsWith("bottom-")
+        if (typeof g.borderWidth === "number") root.islandBorderWidth = Math.max(0, g.borderWidth)
+        if (typeof g.borderRadius === "number") root.islandRadius = Math.max(0, g.borderRadius)
+        if (Array.isArray(g.borderColors) && g.borderColors.length) root.islandBorderColors = g.borderColors
+        if (typeof g.borderAngle === "number") root.islandBorderAngle = g.borderAngle
       } catch (e) {}
     }
   }
@@ -603,6 +610,11 @@ PanelWindow {
     clip: root.morph < 1 || root.drawnHeight < root.contentHeight - 0.5
     color: Commons.Color.popups.background
     borderSpec: Border.none()
+    IslandBorder {
+      attached: root.islandCorner; position: root.islandPosition
+      borderWidth: root.islandBorderWidth; rounding: root.islandRadius
+      colors: root.islandBorderColors; angle: root.islandBorderAngle
+    }
     // Generous padding: with 32px corners, text too close to the edge
     // ends up inside the curve.
     padding: root.padding

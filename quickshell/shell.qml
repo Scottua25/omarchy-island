@@ -76,7 +76,7 @@ ShellRoot {
   }
   Connections {
     target: Hyprland
-    function onRawEvent(event) { if (event.name === "configreloaded") { animProbe.running = true; inactiveBorderProbe.running = true } }
+    function onRawEvent(event) { if (event.name === "configreloaded") { animProbe.running = true; borderProbe.running = true } }
   }
 
   // ── Geometry ──────────────────────────────────────────────────────────────
@@ -112,18 +112,36 @@ ShellRoot {
   readonly property color subColor: Qt.alpha(textColor, 0.6)
   property color red: "#ff453a"
   property color green: "#30d158"
-  property color borderColor: "#595959"    // Hyprland window border (for the notch)
-  property color inactiveBorderColor: "#aa23306e"   // same, unfocused window (read from Hyprland)
+  // Keep border geometry and gradients in step with the actual Hyprland config.
+  property real hyprBorderWidth: 2
+  property real hyprRounding: 6
+  property var activeBorderColors: ["#ff777777"]
+  property var inactiveBorderColors: ["#ff444444"]
+  property real activeBorderAngle: 0
+  property real inactiveBorderAngle: 0
+  function parseBorderGradient(raw) {
+    const parts = String(raw || "").trim().split(/\s+/)
+    const colors = []; let angle = 0
+    for (const p of parts) {
+      if (/^[0-9a-fA-F]{8}$/.test(p)) colors.push("#" + p)
+      else if (/^-?\d+(?:\.\d+)?deg$/.test(p)) angle = parseFloat(p)
+    }
+    return { colors: colors, angle: angle }
+  }
   Process {
-    id: inactiveBorderProbe
+    id: borderProbe
     running: true
-    command: ["hyprctl", "-j", "getoption", "general:col.inactive_border"]
+    command: ["bash", "-c", "{ hyprctl -j getoption general:border_size; hyprctl -j getoption decoration:rounding; hyprctl -j getoption general:col.active_border; hyprctl -j getoption general:col.inactive_border; } | jq -s ."]
     stdout: StdioCollector {
       onStreamFinished: {
         try {
-          const m = String(JSON.parse(text).gradient || "").match(/^([0-9a-fA-F]{8})/)
-          if (m) root.inactiveBorderColor = "#" + m[1]   // AARRGGBB, like Qt
-        } catch (e) {}
+          const v = JSON.parse(text)
+          if (typeof v[0].int === "number") root.hyprBorderWidth = Math.max(0, v[0].int)
+          if (typeof v[1].int === "number") root.hyprRounding = Math.max(0, v[1].int)
+          const a = root.parseBorderGradient(v[2].gradient), i = root.parseBorderGradient(v[3].gradient)
+          if (a.colors.length) { root.activeBorderColors = a.colors; root.activeBorderAngle = a.angle }
+          if (i.colors.length) { root.inactiveBorderColors = i.colors; root.inactiveBorderAngle = i.angle }
+        } catch (e) { console.warn("Island: could not read Hyprland border settings") }
       }
     }
   }
@@ -151,9 +169,7 @@ ShellRoot {
       root.textColor = pick("foreground") || root.textColor
       root.red = pick("red") || root.red
       root.green = pick("green") || root.green
-      // Same single color as the window border (looknfeel.lua: the theme's muted).
-      root.borderColor = Qt.alpha(pick("muted") || pick("selection") || pick("dark_foreground") || "#595959", 0.87)
-      if (text() !== root.themeText) { root.themeText = text(); root.wallRev++ }
+      if (text() !== root.themeText) { root.themeText = text(); root.wallRev++; borderProbe.running = true }
     }
   }
   property string themeText: ""
@@ -1118,13 +1134,7 @@ ShellRoot {
           default:       return Qt.size(win.idleWidth, root.idleHeight)
         }
       }
-      readonly property real targetRadius: root.mode === "idle" || root.mode === "ws" ? root.idleHeight / 2
-                                         : root.mode === "osd" ? 20
-                                         : root.mode === "notify" ? win.notifHeight / 2
-                                         : root.mode === "player" ? 38
-                                         : root.mode === "quick" ? 30
-                                         : root.mode === "shelf" ? 42
-                                         : 32
+      readonly property real targetRadius: root.hyprRounding
 
       TextMetrics {
         id: osdMsgMetrics
@@ -1145,7 +1155,7 @@ ShellRoot {
       Binding { target: root; property: "shotTargetRadius"; when: !!win.hyprMonitor && win.hyprMonitor.focused; value: win.thumbH / 2 }
 
       // Idle pill geometry, for the menu that takes on its shape.
-      readonly property string pillGeometry: JSON.stringify({ w: Math.round(win.idleWidth), h: root.idleHeight, x: Math.round(win.desiredCenter - win.idleWidth / 2), y: root.bottomEdge ? win.height - (root.atCorner ? 0 : root.pillTop) - root.idleHeight : (root.atCorner ? 0 : root.pillTop), position: root.position })
+      readonly property string pillGeometry: JSON.stringify({ w: Math.round(win.idleWidth), h: root.idleHeight, x: Math.round(win.desiredCenter - win.idleWidth / 2), y: root.bottomEdge ? win.height - (root.atCorner ? 0 : root.pillTop) - root.idleHeight : (root.atCorner ? 0 : root.pillTop), position: root.position, borderWidth: root.hyprBorderWidth, borderRadius: root.hyprRounding, borderColors: root.activeBorderColors, borderAngle: root.activeBorderAngle })
       onPillGeometryChanged: pillFile.setText(pillGeometry)
       FileView {
         id: pillFile
@@ -1411,7 +1421,7 @@ ShellRoot {
           included(satDnd) ? rightOf(satDnd) : pillRight,
           included(satShelf) ? rightOf(satShelf) : pillRight))
         readonly property real depth: pill.height * pill.scale + 0.5
-        readonly property real radius: Math.min(pill.radius * pill.scale, depth / 2, (rightEdge - leftEdge) / 2)
+        readonly property real radius: Math.min(root.hyprRounding, depth / 2, (rightEdge - leftEdge) / 2)
         readonly property real leftRadius: root.atCorner && !root.atRight ? 0 : radius
         readonly property real rightRadius: root.atCorner && root.atRight ? 0 : radius
 
@@ -1428,16 +1438,16 @@ ShellRoot {
             PathQuad { x: attachedOutline.rightEdge; y: attachedOutline.depth - attachedOutline.rightRadius; controlX: attachedOutline.rightEdge; controlY: attachedOutline.depth }
             PathLine { x: attachedOutline.rightEdge; y: 0 }
           }
-          ShapePath {
-            strokeWidth: 2; fillColor: "transparent"; capStyle: ShapePath.FlatCap
-            strokeColor: win.centerFocused ? root.borderColor : root.inactiveBorderColor
-            startX: attachedOutline.leftEdge; startY: 0
-            PathLine { x: attachedOutline.leftEdge; y: attachedOutline.depth - attachedOutline.leftRadius }
-            PathQuad { x: attachedOutline.leftEdge + attachedOutline.leftRadius; y: attachedOutline.depth; controlX: attachedOutline.leftEdge; controlY: attachedOutline.depth }
-            PathLine { x: attachedOutline.rightEdge - attachedOutline.rightRadius; y: attachedOutline.depth }
-            PathQuad { x: attachedOutline.rightEdge; y: attachedOutline.depth - attachedOutline.rightRadius; controlX: attachedOutline.rightEdge; controlY: attachedOutline.depth }
-            PathLine { x: attachedOutline.rightEdge; y: 0 }
-          }
+
+        }
+        IslandBorder {
+          x: attachedOutline.leftEdge; y: 0
+          width: attachedOutline.rightEdge - attachedOutline.leftEdge; height: attachedOutline.depth
+          anchors.fill: undefined
+          position: "top-" + root.horizontalPosition
+          borderWidth: root.hyprBorderWidth; rounding: root.hyprRounding
+          colors: win.centerFocused ? root.activeBorderColors : root.inactiveBorderColors
+          angle: (root.bottomEdge ? -1 : 1) * (win.centerFocused ? root.activeBorderAngle : root.inactiveBorderAngle)
         }
       }
 
@@ -1474,6 +1484,13 @@ ShellRoot {
         color: root.pillColor
         clip: true
         antialiasing: true
+        IslandBorder {
+          visible: !win.notch && root.hyprBorderWidth > 0
+          attached: root.atCorner
+          position: root.position
+          borderWidth: root.hyprBorderWidth; rounding: root.hyprRounding
+          colors: root.activeBorderColors; angle: root.activeBorderAngle
+        }
         // With the menu open the pill "lends" itself to the menu, which starts from the same shape.
         opacity: (root.mode === "menu" ? 0 : 1) * Math.min(1, win.revealT * 1.6)
         Behavior on opacity { enabled: root.animate && win.revealT >= 1; NumberAnimation { duration: root.mode === "menu" ? 90 : 0 } }

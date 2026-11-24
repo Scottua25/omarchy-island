@@ -103,7 +103,7 @@ rebuild_clone() {
     sha256sum <"$dest/$f" >"$hashdir/$f.sha"
   done < <( { files_of "$up"; [[ -d $OVERLAY/$x ]] && files_of "$OVERLAY/$x"; } | sort -u)
   rm -f "$tmp"
-  is_styled "$x" && link_components "$dest"
+  if is_styled "$x" || [[ $x == menu || $x == image-picker ]]; then link_components "$dest"; fi
   return 0
 }
 

@@ -121,7 +121,10 @@ Item {
   // shape; if the island doesn't respond, the menu draws its own background.
   readonly property string islandFont: "SF Pro Text"
   readonly property int islandTop: 7          // = the island's pillTop
-  readonly property int islandRadius: 32
+  property real islandRadius: 6
+  property real islandBorderWidth: 2
+  property var islandBorderColors: ["#ff777777"]
+  property real islandBorderAngle: 0
   property bool islandAlive: false
   // morphShape draws the black background: the card stays transparent.
   property color background: "transparent"
@@ -154,6 +157,10 @@ Item {
         root.pillX = typeof g.x === "number" ? g.x : -1
         root.islandPosition = typeof g.position === "string" ? g.position : "top-center"
         root.islandBottom = root.islandPosition.startsWith("bottom-")
+        if (typeof g.borderWidth === "number") root.islandBorderWidth = Math.max(0, g.borderWidth)
+        if (typeof g.borderRadius === "number") root.islandRadius = Math.max(0, g.borderRadius)
+        if (Array.isArray(g.borderColors) && g.borderColors.length) root.islandBorderColors = g.borderColors
+        if (typeof g.borderAngle === "number") root.islandBorderAngle = g.borderAngle
       } catch (e) {}
     }
   }
@@ -1435,6 +1442,11 @@ Item {
         id: morphShape
         anchors.fill: parent
         color: root.islandBlack
+    IslandBorder {
+      attached: root.islandCorner; position: root.islandPosition
+      borderWidth: root.islandBorderWidth; rounding: root.islandRadius
+      colors: root.islandBorderColors; angle: root.islandBorderAngle
+    }
         radius: Math.min(height / 2, root.pillH / 2 + (root.islandRadius - root.pillH / 2) * Math.min(1, Math.max(0, root.morph)))
     topLeftRadius: root.islandCorner && !(root.islandBottom && root.islandRight) ? 0 : radius
     topRightRadius: root.islandCorner && !(root.islandBottom && !root.islandRight) ? 0 : radius
