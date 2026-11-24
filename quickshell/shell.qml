@@ -1062,6 +1062,13 @@ ShellRoot {
       readonly property real idleWidth: idleRow.implicitWidth + 28
       readonly property real desiredCenter: root.islandCenter(win.width, win.idleWidth)
       readonly property real pillCenter: root.atCorner ? (root.atRight ? win.width - pill.width / 2 : pill.width / 2) : win.width / 2
+      // Offsets measured from the fixed corner stay put while the pill grows.
+      function centerFromAnchor(targetWidth) {
+        return root.atCorner ? (root.atRight ? -targetWidth / 2 : targetWidth / 2) : 0
+      }
+      readonly property real quickScreenX: root.atCorner
+        ? (root.atRight ? win.width - quickFull.implicitWidth - 12 : 12)
+        : win.width / 2 - quickFull.implicitWidth / 2
       readonly property real restWidth: root.mode === "ws" ? wsRow.implicitWidth + 36 : idleWidth
       // Notification = a real pill: a single band, taller only if the text wraps to two lines.
       readonly property real notifHeight: !notif.body ? 56 : (notif.body.length > 52 ? 80 : 68)
@@ -1176,11 +1183,12 @@ ShellRoot {
         // around the center, hence the offsets).
         readonly property real notchRestX: root.horizontalPosition === "right" ? win.pillCenter - win.restWidth * win.notchScale / 2 - 6 * win.notchScale - width * (1 + win.notchScale) / 2 : win.pillCenter + win.restWidth * win.notchScale / 2 + 6 * win.notchScale - width * (1 - win.notchScale) / 2
         readonly property real notchY: win.notchTop - height * (1 - win.notchScale) / 2
-        y: root.bottomEdge ? win.height - height - (docked ? root.pillTop + 30 - height / 2 : notched ? notchY : root.pillTop) : (docked ? root.pillTop + 30 - height / 2 : notched ? notchY : root.pillTop)
+        y: root.bottomEdge ? win.height - height - (docked ? (root.atCorner ? 0 : root.pillTop) + 30 - height / 2 : notched ? notchY : root.pillTop) : (docked ? (root.atCorner ? 0 : root.pillTop) + 30 - height / 2 : notched ? notchY : root.pillTop)
         // Follow the pill's moving center directly while animating only the
         // satellite's offset. This avoids restarting the animation each frame.
-        property real centerOffset: (docked ? dockX - width / 2 : shown ? (notched ? notchRestX : restX) : idleRight - width) - win.pillCenter
-        x: win.pillCenter + centerOffset
+        readonly property real anchorX: root.atCorner ? (root.atRight ? win.width : 0) : win.pillCenter
+        property real centerOffset: (docked ? dockX - width / 2 : shown ? (notched ? notchRestX : restX) : idleRight - width) - anchorX
+        x: anchorX + centerOffset
         scale: docked ? 44 / root.idleHeight : shown ? (notched ? win.notchScale : 1) : 0.4
         opacity: shown || docked ? 1 : 0
         color: docked ? root.accent : root.pillColor
@@ -1204,14 +1212,14 @@ ShellRoot {
         id: satCaffeine
         on: root.stayAwake
         slot: 0
-        dockX: win.pillCenter - quickFull.implicitWidth / 2 + quickFull.caffeineX
+        dockX: win.quickScreenX + quickFull.caffeineX
         glyph: "󰅶"
         onClicked: root.toggleCaffeine()
       }
       Satellite {
         id: satDnd
         on: root.dnd
-        dockX: win.pillCenter - quickFull.implicitWidth / 2 + quickFull.dndX
+        dockX: win.quickScreenX + quickFull.dndX
         slot: root.stayAwake ? 1 : 0
         glyph: "󰂛"
         glyphColor: root.subColor
@@ -1545,7 +1553,9 @@ ShellRoot {
         y: root.bottomEdge ? win.height - height - (root.atCorner ? 0 : (win.notch ? win.notchTop : root.pillTop)) : (root.atCorner ? 0 : (win.notch ? win.notchTop : root.pillTop))
         transformOrigin: root.atCorner ? (root.bottomEdge ? (root.atRight ? Item.BottomRight : Item.BottomLeft) : (root.atRight ? Item.TopRight : Item.TopLeft)) : (root.bottomEdge ? Item.Bottom : Item.Top)
         scale: (win.notch ? win.notchScale : 1) * root.gulp
-        Behavior on y { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        // Corner y follows the animated height so the attached edge stays
+        // fixed. Animating y separately makes it chase height changes.
+        Behavior on y { enabled: root.animate && !root.atCorner; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         Behavior on scale { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         // Reveal from hiding (win.reveal): squeezed against the top edge, then
         // drops and widens into place.
@@ -1937,12 +1947,12 @@ ShellRoot {
           // Animate offsets from the pill's center. Its center moves on every
           // frame in a corner, so animating screen coordinates chases a moving
           // target and makes the clock lag or jump during the resize.
-          readonly property real ax: -idleRow.implicitWidth / 2 + idleTime.x + (idleTime.width - implicitWidth * s0) / 2
-          readonly property real ay: (root.idleHeight - implicitHeight * s0) / 2
-          readonly property real bx: -480 / 2 + 18 + dashHeaderCol.x
-          readonly property real by: 18 + dashHeaderCol.y
-          readonly property real qx: -quickFull.implicitWidth / 2 + quickFull.clockX - (implicitWidth * sq - quickFull.clockW) / 2
-          readonly property real qy: (60 - implicitHeight * sq) / 2
+          readonly property real ax: win.centerFromAnchor(win.idleWidth) - idleRow.implicitWidth / 2 + idleTime.x + (idleTime.width - implicitWidth * s0) / 2
+          readonly property real ay: (root.idleHeight - implicitHeight * s0) / 2 - (root.atCorner && root.bottomEdge ? root.idleHeight : 0)
+          readonly property real bx: win.centerFromAnchor(480) - 480 / 2 + 18 + dashHeaderCol.x
+          readonly property real by: 18 + dashHeaderCol.y - (root.atCorner && root.bottomEdge ? dash.implicitHeight + 36 : 0)
+          readonly property real qx: win.centerFromAnchor(quickFull.implicitWidth + 24) - quickFull.implicitWidth / 2 + quickFull.clockX - (implicitWidth * sq - quickFull.clockW) / 2
+          readonly property real qy: (60 - implicitHeight * sq) / 2 - (root.atCorner && root.bottomEdge ? 60 : 0)
           readonly property string spot: root.mode === "dash" ? "dash" : root.mode === "quick" ? "quick" : "idle"
           property real wx: spot === "dash" ? bx : spot === "quick" ? qx : ax
           property real wy: spot === "dash" ? by : spot === "quick" ? qy : ay
@@ -1951,8 +1961,8 @@ ShellRoot {
           Behavior on wy { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
           Behavior on sc { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
           scale: sc
-          x: pill.width / 2 + wx
-          y: wy
+          x: (root.atCorner ? (root.atRight ? pill.width : 0) : pill.width / 2) + wx
+          y: (root.atCorner && root.bottomEdge ? pill.height : 0) + wy
           opacity: shown ? 1 : 0
           visible: opacity > 0 && (win.calm || spot !== "idle")
           // Leaves immediately (must not pass over the incoming text), returns smoothly.
@@ -2153,7 +2163,9 @@ ShellRoot {
           satellitesDock: true
           timeText: root.timeText
           displayFont: root.displayFont
-          anchors.centerIn: parent
+          // Keep controls at their final screen position as the pill grows.
+          x: root.atCorner ? (root.atRight ? parent.width - width - 12 : 12) : (parent.width - width) / 2
+          y: root.atCorner ? (root.bottomEdge ? parent.height - height - 8 : 8) : (parent.height - height) / 2
           opacity: root.mode === "quick" ? 1 : 0
           visible: opacity > 0
           enabled: root.mode === "quick"
