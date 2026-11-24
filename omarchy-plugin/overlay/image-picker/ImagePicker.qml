@@ -80,6 +80,8 @@ Item {
   property real pillW: 200
   property real pillH: 30
   property real pillY: 7
+  property real pillX: -1
+  property bool islandBottom: false
   readonly property bool wantOpen: root.opened && root.layoutSettled
   FileView {
     path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/island-pill.json"
@@ -92,6 +94,8 @@ Item {
         root.pillW = Number(g.w) || root.pillW
         root.pillH = Number(g.h) || root.pillH
         root.pillY = isNaN(Number(g.y)) ? root.pillY : Number(g.y)
+        root.pillX = typeof g.x === "number" ? g.x : -1
+        root.islandBottom = typeof g.position === "string" && g.position.startsWith("bottom-")
       } catch (e) {}
     }
   }
@@ -742,8 +746,8 @@ Item {
       readonly property real fullH: root.islandPad + root.expandedHeight + (root.showLabels ? 38 : 0) + (root.filterable && root.filterText.trim().length > 0 ? 24 : 0) + 18
       width: Math.max(1, root.pillW + (fullW - root.pillW) * root.morph)
       height: Math.max(1, root.pillH + (fullH - root.pillH) * root.morph)
-      anchors.horizontalCenter: parent.horizontalCenter
-      y: root.pillY + (root.islandTop - root.pillY) * Math.min(1, root.morph)
+      x: root.pillX < 0 ? (parent.width - width) / 2 : Math.max(7, Math.min(root.pillX + root.pillW / 2 - width / 2, parent.width - width - 7))
+      y: root.pillY + ((root.islandBottom ? Math.max(7, parent.height - root.islandTop - fullH) : root.islandTop) - root.pillY) * Math.min(1, root.morph)
 
       RectangularShadow {
         anchors.fill: islandShape

@@ -52,7 +52,9 @@ PanelWindow {
   property real pillW: 200
   property real pillH: 30
   property real pillY: 7
-  readonly property rect pillRect: Qt.rect(Math.round(screenW / 2 - pillW / 2), pillY, pillW, pillH)
+  property real pillX: -1
+  property bool islandBottom: false
+  readonly property rect pillRect: Qt.rect(pillX >= 0 ? pillX : Math.round(screenW / 2 - pillW / 2), pillY, pillW, pillH)
   FileView {
     path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/island-pill.json"
     watchChanges: true
@@ -64,6 +66,8 @@ PanelWindow {
         root.pillW = Number(g.w) || root.pillW
         root.pillH = Number(g.h) || root.pillH
         root.pillY = isNaN(Number(g.y)) ? root.pillY : Number(g.y)
+        root.pillX = typeof g.x === "number" ? g.x : -1
+        root.islandBottom = typeof g.position === "string" && g.position.startsWith("bottom-")
       } catch (e) {}
     }
   }
@@ -282,6 +286,7 @@ PanelWindow {
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
   readonly property point cardOrigin: {
+    if (pillX >= 0) return Qt.point(Math.round(Math.max(margin, Math.min(pillX + pillW / 2 - contentWidth / 2, screenW - contentWidth - margin))), Math.round(islandBottom ? Math.max(margin, screenH - islandTop - drawnHeight) : islandTop))
     if (!anchorItem || !bar) return Qt.point(Math.round(screenW / 2 - contentWidth / 2), islandTop)
     var x = 0, y = 0
     if (barPos === "top") {

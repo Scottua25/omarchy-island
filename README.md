@@ -97,13 +97,15 @@ Create `~/.config/omarchy-island/settings.json` to customize the clock and notch
 {
   "clockFormat": "h:mm AP",
   "notchScale": 0.95,
-  "notchMode": "all"
+  "notchMode": "all",
+  "position": "top-center"
 }
 ```
 
 - `clockFormat`: Qt time format, for example `h:mm AP` for 12-hour time or `HH:mm` for 24-hour time.
 - `notchScale`: notch size relative to the normal pill; values are limited to 0.5–1.0.
 - `notchMode`: `all` allows tiled windows to reach the top (the island may cover content); `browser` uses the original browser and window-gap behavior; `off` reserves space for the island. `ISLAND_NOTCH=off` takes precedence.
+- `position`: `top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, or `bottom-right`. Bottom positions can overlap a bottom dock.
 
 The values above are also the defaults if the file is absent. Invalid JSON leaves the last valid settings active. This file is separate from the checkout and survives updates.
 

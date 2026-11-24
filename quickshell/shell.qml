@@ -51,6 +51,13 @@ ShellRoot {
   }
   readonly property string clockFormat: typeof userSettings.clockFormat === "string" && userSettings.clockFormat.length > 0 ? userSettings.clockFormat : "h:mm AP"
   readonly property real configuredNotchScale: typeof userSettings.notchScale === "number" && isFinite(userSettings.notchScale) ? Math.max(0.5, Math.min(1, userSettings.notchScale)) : 0.95
+  readonly property string position: ["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"].includes(userSettings.position) ? userSettings.position : "top-center"
+  readonly property bool bottomEdge: position.startsWith("bottom-")
+  readonly property string horizontalPosition: position.split("-")[1]
+  function islandCenter(screenWidth, idleWidth) {
+    const pad = 22
+    return horizontalPosition === "left" ? pad + idleWidth / 2 : horizontalPosition === "right" ? screenWidth - pad - idleWidth / 2 : screenWidth / 2
+  }
   readonly property string notchMode: ["all", "browser", "off"].includes(userSettings.notchMode) ? userSettings.notchMode : "all"
 
   // ── Animations ────────────────────────────────────────────────────────────
@@ -762,7 +769,7 @@ ShellRoot {
   readonly property bool notchEnabled: Quickshell.env("ISLAND_NOTCH") !== "off" && root.notchMode !== "off"
   function notchOk(ws, screen) {
     if (!root.notchEnabled || !ws || !ws.toplevels || !screen) return false
-    const cx = screen.x + screen.width / 2
+    const cx = screen.x + root.islandCenter(screen.width, 100)
     let tiled = 0
     for (const t of ws.toplevels.values) {
       const ipc = t.lastIpcObject || {}
@@ -780,7 +787,7 @@ ShellRoot {
   // its own border, which turns down along its side.
   function notchGap(ws, screen) {
     if (!ws || !ws.toplevels || !screen) return null
-    const cx = screen.x + screen.width / 2
+    const cx = screen.x + root.islandCenter(screen.width, 100)
     let l = -1, r = -1
     for (const t of ws.toplevels.values) {
       const ipc = t.lastIpcObject || {}
@@ -845,7 +852,7 @@ ShellRoot {
     PanelWindow {
       required property var modelData
       screen: modelData
-      anchors { top: true; left: true; right: true }
+      anchors { top: !root.bottomEdge; bottom: root.bottomEdge; left: true; right: true }
       implicitHeight: 1
       // Browser or gap between windows under the pill: no strip, the windows go
       // all the way to the top and the island sits over them as a notch.
@@ -877,7 +884,10 @@ ShellRoot {
       screen: modelData
       readonly property var hyprMonitor: Hyprland.monitorFor(modelData)
       readonly property var ws: hyprMonitor ? hyprMonitor.activeWorkspace : null
-      anchors.top: true
+      anchors.top: !root.bottomEdge
+      anchors.bottom: root.bottomEdge
+      anchors.left: root.horizontalPosition === "left"
+      anchors.right: root.horizontalPosition === "right"
       implicitWidth: 520
       implicitHeight: 18     // room for the glow; the mouse only sees the top 6 px
       exclusionMode: ExclusionMode.Ignore
@@ -887,7 +897,7 @@ ShellRoot {
       WlrLayershell.namespace: "island-drop"
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       mask: Region { item: hitStrip }
-      Item { id: hitStrip; width: parent.width; height: 6 }
+      Item { id: hitStrip; width: parent.width; height: 6; y: root.bottomEdge ? parent.height - height : 0 }
       property bool dragOver: false
 
       // Something on the shelf: a thin glowing bar where the island would be,
@@ -896,7 +906,7 @@ ShellRoot {
       Item {
         id: glow
         anchors.horizontalCenter: parent.horizontalCenter
-        y: 3
+        y: root.bottomEdge ? parent.height - height - 3 : 3
         readonly property bool on: root.shelfItems.length > 0 || sensor.dragOver
         readonly property bool away: root.mode === "shelf"
         width: !on ? 0 : sensor.dragOver ? 150 : 64 + Math.min(4, root.shelfItems.length - 1) * 8
@@ -971,8 +981,7 @@ ShellRoot {
       required property var modelData
       screen: modelData
 
-      anchors.top: true
-      implicitWidth: 800
+      anchors { top: true; left: true; right: true }
       implicitHeight: modelData.height
       exclusionMode: ExclusionMode.Ignore
       color: "transparent"
@@ -1024,7 +1033,7 @@ ShellRoot {
       }
       readonly property bool centerFocused: {
         if (!focusIpc || focusIpc.floating) return false
-        const cx = modelData.x + modelData.width / 2
+        const cx = modelData.x + win.desiredCenter
         return focusIpc.at[0] <= cx && cx <= focusIpc.at[0] + focusIpc.size[0]
       }
       readonly property var notchGap: notchScreen ? root.notchGap(hyprMonitor ? hyprMonitor.activeWorkspace : null, modelData) : null
@@ -1049,6 +1058,8 @@ ShellRoot {
 
       // Clock only: narrow pill, 14 px per side. A bit more with ears.
       readonly property real idleWidth: idleRow.implicitWidth + 28
+      readonly property real desiredCenter: root.islandCenter(win.width, win.idleWidth)
+      readonly property real pillCenter: Math.max(win.targetSize.width / 2 + 12, Math.min(win.width - win.targetSize.width / 2 - 12, desiredCenter))
       readonly property real restWidth: root.mode === "ws" ? wsRow.implicitWidth + 36 : idleWidth
       // Notification = a real pill: a single band, taller only if the text wraps to two lines.
       readonly property real notifHeight: !notif.body ? 56 : (notif.body.length > 52 ? 80 : 68)
@@ -1088,13 +1099,13 @@ ShellRoot {
       Binding {
         target: root; property: "shotTarget"
         when: !!win.hyprMonitor && win.hyprMonitor.focused
-        value: Qt.rect((win.modelData.width - win.width) / 2 + win.width / 2 - Math.min(win.width - 40, 410 + notifView.actionsWidth) / 2 + 8,
-                       root.pillTop + 8, Math.round(win.thumbH * 1.45), win.thumbH)
+        value: Qt.rect(win.pillCenter - Math.min(win.width - 40, 410 + notifView.actionsWidth) / 2 + 8,
+                       (root.bottomEdge ? win.height - root.pillTop - win.notifHeight : root.pillTop) + 8, Math.round(win.thumbH * 1.45), win.thumbH)
       }
       Binding { target: root; property: "shotTargetRadius"; when: !!win.hyprMonitor && win.hyprMonitor.focused; value: win.thumbH / 2 }
 
       // Idle pill geometry, for the menu that takes on its shape.
-      readonly property string pillGeometry: JSON.stringify({ w: Math.round(win.idleWidth), h: root.idleHeight, y: root.pillTop })
+      readonly property string pillGeometry: JSON.stringify({ w: Math.round(win.idleWidth), h: root.idleHeight, x: Math.round(win.desiredCenter - win.idleWidth / 2), y: root.bottomEdge ? win.height - root.pillTop - root.idleHeight : root.pillTop, position: root.position })
       onPillGeometryChanged: pillFile.setText(pillGeometry)
       FileView {
         id: pillFile
@@ -1105,11 +1116,11 @@ ShellRoot {
 
       RectangularShadow {
         anchors.fill: pill
-        transformOrigin: Item.Top
+        transformOrigin: root.bottomEdge ? Item.Bottom : Item.Top
         scale: pill.scale
         transform: [
-          Scale { origin.x: pill.width / 2; origin.y: 0; xScale: 0.55 + 0.45 * win.reveal; yScale: 0.25 + 0.75 * win.reveal },
-          Translate { y: -(1 - win.reveal) * (root.pillTop + 14) }
+          Scale { origin.x: pill.width / 2; origin.y: root.bottomEdge ? pill.height : 0; xScale: 0.55 + 0.45 * win.reveal; yScale: 0.25 + 0.75 * win.reveal },
+          Translate { y: (root.bottomEdge ? 1 : -1) * (1 - win.reveal) * (root.pillTop + 14) }
         ]
         // No shadow with the notch: it darkened the page around it but not the
         // background redrawn inside the notch, leaving a visible box and line.
@@ -1154,17 +1165,16 @@ ShellRoot {
         // animating): so it slides back right away, with the same spring.
         // It follows the real pill: on workspace change the pill widens and the
         // satellites move aside with the same spring instead of touching it.
-        readonly property real idleRight: win.width / 2 + win.restWidth / 2
-        readonly property real restX: idleRight + 6 + slot * (root.idleHeight + 6) + extra
+        readonly property real idleRight: win.pillCenter + win.restWidth / 2
+        readonly property real restX: root.horizontalPosition === "right" ? win.pillCenter - win.restWidth / 2 - 6 - width - slot * (root.idleHeight + 6) - extra : idleRight + 6 + slot * (root.idleHeight + 6) + extra
         width: root.idleHeight
         height: root.idleHeight
         radius: height / 2
         // With the notch: same scale as the pill, top-aligned with it (scale is
         // around the center, hence the offsets).
-        readonly property real notchRestX: win.width / 2 + win.restWidth * win.notchScale / 2 + 6 * win.notchScale
-                                           - width * (1 - win.notchScale) / 2
+        readonly property real notchRestX: root.horizontalPosition === "right" ? win.pillCenter - win.restWidth * win.notchScale / 2 - 6 * win.notchScale - width * (1 + win.notchScale) / 2 : win.pillCenter + win.restWidth * win.notchScale / 2 + 6 * win.notchScale - width * (1 - win.notchScale) / 2
         readonly property real notchY: win.notchTop - height * (1 - win.notchScale) / 2
-        y: docked ? root.pillTop + 30 - height / 2 : notched ? notchY : root.pillTop
+        y: root.bottomEdge ? win.height - height - (docked ? root.pillTop + 30 - height / 2 : notched ? notchY : root.pillTop) : (docked ? root.pillTop + 30 - height / 2 : notched ? notchY : root.pillTop)
         x: docked ? dockX - width / 2 : shown ? (notched ? notchRestX : restX) : idleRight - width
         scale: docked ? 44 / root.idleHeight : shown ? (notched ? win.notchScale : 1) : 0.4
         opacity: shown || docked ? 1 : 0
@@ -1189,14 +1199,14 @@ ShellRoot {
         id: satCaffeine
         on: root.stayAwake
         slot: 0
-        dockX: win.width / 2 - quickFull.implicitWidth / 2 + quickFull.caffeineX
+        dockX: win.pillCenter - quickFull.implicitWidth / 2 + quickFull.caffeineX
         glyph: "󰅶"
         onClicked: root.toggleCaffeine()
       }
       Satellite {
         id: satDnd
         on: root.dnd
-        dockX: win.width / 2 - quickFull.implicitWidth / 2 + quickFull.dndX
+        dockX: win.pillCenter - quickFull.implicitWidth / 2 + quickFull.dndX
         slot: root.stayAwake ? 1 : 0
         glyph: "󰂛"
         glyphColor: root.subColor
@@ -1330,8 +1340,9 @@ ShellRoot {
         visible: opacity > 0 && !root.wsSliding
         Behavior on opacity { enabled: root.animate; NumberAnimation { duration: win.notchDrawn ? 260 : 120; easing.type: Easing.OutCubic } }
         // Full-screen coordinates (the island window is centered).
-        readonly property real offsetX: (win.modelData.width - win.width) / 2
-        x: -offsetX; y: 0
+        readonly property real offsetX: 0
+        x: 0; y: root.bottomEdge ? win.height - height : 0
+        transform: Scale { origin.y: 32; yScale: root.bottomEdge ? -1 : 1 }
         width: win.modelData.width
         height: 64
         // Shape: the border follows the pill at a constant distance (same centers
@@ -1346,7 +1357,7 @@ ShellRoot {
         readonly property real pl: offsetX + pill.x + (pill.width - pw) / 2
         readonly property real pr: Math.min(pill.radius * pill.scale, ph / 2)   // pill corner radius
         readonly property real big: pr + m                                       // border radius
-        readonly property real cy: pill.y + ph - pr                              // bottom corner centers
+        readonly property real cy: (root.bottomEdge ? win.height - (pill.y + pill.height) : pill.y) + ph - pr                              // bottom corner centers
         readonly property real cxL: pl + pr
         // Shelf satellite next to the pill: the notch reaches it too.
         readonly property real cxR: Math.max(pl + pw, satShelf.notched && satShelf.opacity > 0 ? offsetX + satShelf.drawnRight : 0) - pr
@@ -1476,10 +1487,10 @@ ShellRoot {
       Rectangle {
         id: pill
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.horizontalCenterOffset: root.shakeX
+        anchors.horizontalCenterOffset: win.pillCenter - win.width / 2 + root.shakeX
         // With the notch the pill gets smaller and moves up: it covers less of the page.
-        y: win.notch ? win.notchTop : root.pillTop
-        transformOrigin: Item.Top
+        y: root.bottomEdge ? win.height - height - (win.notch ? win.notchTop : root.pillTop) : (win.notch ? win.notchTop : root.pillTop)
+        transformOrigin: root.bottomEdge ? Item.Bottom : Item.Top
         scale: (win.notch ? win.notchScale : 1) * root.gulp
         Behavior on y { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         Behavior on scale { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -1488,11 +1499,11 @@ ShellRoot {
         transform: [
           Scale {
             origin.x: pill.width / 2
-            origin.y: 0
+            origin.y: root.bottomEdge ? pill.height : 0
             xScale: 0.55 + 0.45 * win.reveal
             yScale: 0.25 + 0.75 * win.reveal
           },
-          Translate { y: -(1 - win.reveal) * (root.pillTop + 14) }
+          Translate { y: (root.bottomEdge ? 1 : -1) * (1 - win.reveal) * (root.pillTop + 14) }
         ]
         width: win.targetSize.width
         height: win.targetSize.height
@@ -1867,11 +1878,11 @@ ShellRoot {
           font.features: { "tnum": 1 }
           transformOrigin: Item.TopLeft
           // Targets in window coordinates.
-          readonly property real ax: win.width / 2 - idleRow.implicitWidth / 2 + idleTime.x + (idleTime.width - implicitWidth * s0) / 2
+          readonly property real ax: win.pillCenter - idleRow.implicitWidth / 2 + idleTime.x + (idleTime.width - implicitWidth * s0) / 2
           readonly property real ay: (root.idleHeight - implicitHeight * s0) / 2
-          readonly property real bx: win.width / 2 - 480 / 2 + 18 + dashHeaderCol.x
+          readonly property real bx: win.pillCenter - 480 / 2 + 18 + dashHeaderCol.x
           readonly property real by: 18 + dashHeaderCol.y
-          readonly property real qx: win.width / 2 - quickFull.implicitWidth / 2 + quickFull.clockX - (implicitWidth * sq - quickFull.clockW) / 2
+          readonly property real qx: win.pillCenter - quickFull.implicitWidth / 2 + quickFull.clockX - (implicitWidth * sq - quickFull.clockW) / 2
           readonly property real qy: (60 - implicitHeight * sq) / 2
           readonly property string spot: root.mode === "dash" ? "dash" : root.mode === "quick" ? "quick" : "idle"
           property real wx: spot === "dash" ? bx : spot === "quick" ? qx : ax
@@ -1904,9 +1915,9 @@ ShellRoot {
             return Quickshell.iconPath((e && e.icon) || p.desktopEntry || "", true)
           }
           // Targets in window coordinates, animated: straight path.
-          readonly property real tx: root.mode === "dash" ? win.width / 2 - 480 / 2 + 18 + cc.x + cc.artX
-                                   : root.mode === "player" ? win.width / 2 - (420 + 112) / 2 + 8
-                                   : win.width / 2 - idleRow.implicitWidth / 2
+          readonly property real tx: root.mode === "dash" ? win.pillCenter - 480 / 2 + 18 + cc.x + cc.artX
+                                   : root.mode === "player" ? win.pillCenter - (420 + 112) / 2 + 8
+                                   : win.pillCenter - idleRow.implicitWidth / 2
           readonly property real ty: root.mode === "dash" ? 18 + cc.y + cc.artY
                                    : root.mode === "player" ? 8
                                    : (root.idleHeight - 18) / 2

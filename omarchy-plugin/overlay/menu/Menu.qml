@@ -135,6 +135,8 @@ Item {
   property real pillW: 200
   property real pillH: 30
   property real pillY: 7
+  property real pillX: -1
+  property bool islandBottom: false
   FileView {
     path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/island-pill.json"
     watchChanges: true
@@ -146,6 +148,8 @@ Item {
         root.pillW = Number(g.w) || root.pillW
         root.pillH = Number(g.h) || root.pillH
         root.pillY = isNaN(Number(g.y)) ? root.pillY : Number(g.y)
+        root.pillX = typeof g.x === "number" ? g.x : -1
+        root.islandBottom = typeof g.position === "string" && g.position.startsWith("bottom-")
       } catch (e) {}
     }
   }
@@ -260,7 +264,7 @@ Item {
   // Uses panel.cardTop rather than effectiveCardTop: the centered top is
   // derived from the card height, which this value feeds.
   function availableRowsHeight() {
-    var top = panel.cardTop >= 0 ? panel.cardTop : Style.gapsOut
+    var top = root.islandBottom ? Style.gapsOut : (panel.cardTop >= 0 ? panel.cardTop : Style.gapsOut)
     var available = panel.height - top - Style.gapsOut - root.contentMargin * 2 - root.headerHeight - root.contentSpacing
     // The starting menu sets the ceiling along with the offset: drilling into
     // a longer submenu scrolls behind the fold instead of growing the card.
@@ -1380,7 +1384,7 @@ Item {
     property int maxRowsHeight: -1
     readonly property int centeredTop: Math.max(Style.gapsOut, Math.round((height - root.cardHeight) / 2))
     // omarchy-island: the menu grows out of the island, at the top center.
-    readonly property int effectiveCardTop: root.islandTop
+    readonly property int effectiveCardTop: root.islandBottom ? Math.max(Style.gapsOut, height - root.islandTop - root.cardHeight) : root.islandTop
     function freezeCardTop() {
       if (shown && cardTop < 0) {
         cardTop = effectiveCardTop
@@ -1413,7 +1417,7 @@ Item {
       Behavior on sizeH { enabled: morphBox.settled; SpringAnimation { spring: 3.4; damping: 0.34; epsilon: 0.3 } }
       width: Math.max(1, sizeW)
       height: Math.max(1, sizeH)
-      anchors.horizontalCenter: parent.horizontalCenter
+      x: root.pillX < 0 ? (parent.width - width) / 2 : Math.max(Style.gapsOut, Math.min(root.pillX + root.pillW / 2 - width / 2, parent.width - width - Style.gapsOut))
       y: root.pillY + (panel.effectiveCardTop - root.pillY) * Math.min(1, root.morph)
 
       RectangularShadow {
@@ -1445,7 +1449,7 @@ Item {
     BorderSurface {
       id: card
       width: root.cardWidth
-      height: Math.min(root.cardHeight, panel.height - Style.gapsOut - panel.effectiveCardTop)
+      height: Math.min(root.cardHeight, panel.height - Style.gapsOut * 2)
       radius: root.cornerRadius
       x: Math.round((clipBox.width - width) / 2)
       y: 0
