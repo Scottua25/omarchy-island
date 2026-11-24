@@ -54,6 +54,9 @@ PanelWindow {
   property real pillY: 7
   property real pillX: -1
   property bool islandBottom: false
+  property string islandPosition: "top-center"
+  readonly property bool islandCorner: !islandPosition.endsWith("-center")
+  readonly property bool islandRight: islandPosition.endsWith("-right")
   readonly property rect pillRect: Qt.rect(pillX >= 0 ? pillX : Math.round(screenW / 2 - pillW / 2), pillY, pillW, pillH)
   FileView {
     path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/island-pill.json"
@@ -67,7 +70,8 @@ PanelWindow {
         root.pillH = Number(g.h) || root.pillH
         root.pillY = isNaN(Number(g.y)) ? root.pillY : Number(g.y)
         root.pillX = typeof g.x === "number" ? g.x : -1
-        root.islandBottom = typeof g.position === "string" && g.position.startsWith("bottom-")
+        root.islandPosition = typeof g.position === "string" ? g.position : "top-center"
+        root.islandBottom = root.islandPosition.startsWith("bottom-")
       } catch (e) {}
     }
   }
@@ -286,6 +290,7 @@ PanelWindow {
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
   readonly property point cardOrigin: {
+    if (pillX >= 0 && root.islandCorner) return Qt.point(root.islandRight ? screenW - contentWidth : 0, root.islandBottom ? screenH - drawnHeight : 0)
     if (pillX >= 0) return Qt.point(Math.round(Math.max(margin, Math.min(pillX + pillW / 2 - contentWidth / 2, screenW - contentWidth - margin))), Math.round(islandBottom ? Math.max(margin, screenH - islandTop - drawnHeight) : islandTop))
     if (!anchorItem || !bar) return Qt.point(Math.round(screenW / 2 - contentWidth / 2), islandTop)
     var x = 0, y = 0
@@ -602,6 +607,10 @@ PanelWindow {
     // ends up inside the curve.
     padding: root.padding
     radius: Math.min(height / 2, root.islandRadius)
+    topLeftRadius: root.islandCorner && !(root.islandBottom && root.islandRight) ? 0 : radius
+    topRightRadius: root.islandCorner && !(root.islandBottom && !root.islandRight) ? 0 : radius
+    bottomLeftRadius: root.islandCorner && !(!root.islandBottom && root.islandRight) ? 0 : radius
+    bottomRightRadius: root.islandCorner && !(!root.islandBottom && !root.islandRight) ? 0 : radius
 
     // The card fades in as it grows out of the bar from just under full size,
     // toward the icon it hangs from, and goes in two thirds of the time. On a

@@ -82,6 +82,9 @@ Item {
   property real pillY: 7
   property real pillX: -1
   property bool islandBottom: false
+  property string islandPosition: "top-center"
+  readonly property bool islandCorner: !islandPosition.endsWith("-center")
+  readonly property bool islandRight: islandPosition.endsWith("-right")
   readonly property bool wantOpen: root.opened && root.layoutSettled
   FileView {
     path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/island-pill.json"
@@ -95,7 +98,8 @@ Item {
         root.pillH = Number(g.h) || root.pillH
         root.pillY = isNaN(Number(g.y)) ? root.pillY : Number(g.y)
         root.pillX = typeof g.x === "number" ? g.x : -1
-        root.islandBottom = typeof g.position === "string" && g.position.startsWith("bottom-")
+        root.islandPosition = typeof g.position === "string" ? g.position : "top-center"
+        root.islandBottom = root.islandPosition.startsWith("bottom-")
       } catch (e) {}
     }
   }
@@ -746,8 +750,8 @@ Item {
       readonly property real fullH: root.islandPad + root.expandedHeight + (root.showLabels ? 38 : 0) + (root.filterable && root.filterText.trim().length > 0 ? 24 : 0) + 18
       width: Math.max(1, root.pillW + (fullW - root.pillW) * root.morph)
       height: Math.max(1, root.pillH + (fullH - root.pillH) * root.morph)
-      x: root.pillX < 0 ? (parent.width - width) / 2 : Math.max(7, Math.min(root.pillX + root.pillW / 2 - width / 2, parent.width - width - 7))
-      y: root.pillY + ((root.islandBottom ? Math.max(7, parent.height - root.islandTop - fullH) : root.islandTop) - root.pillY) * Math.min(1, root.morph)
+      x: root.islandCorner ? (root.islandRight ? parent.width - width : 0) : root.pillX < 0 ? (parent.width - width) / 2 : Math.max(7, Math.min(root.pillX + root.pillW / 2 - width / 2, parent.width - width - 7))
+      y: root.islandCorner ? (root.islandBottom ? parent.height - height : 0) : root.pillY + ((root.islandBottom ? Math.max(7, parent.height - root.islandTop - fullH) : root.islandTop) - root.pillY) * Math.min(1, root.morph)
 
       RectangularShadow {
         anchors.fill: islandShape
@@ -761,11 +765,19 @@ Item {
         anchors.fill: parent
         color: Commons.Color.background
         radius: Math.min(height / 2, root.pillH / 2 + (root.islandRadius - root.pillH / 2) * Math.min(1, Math.max(0, root.morph)))
+    topLeftRadius: root.islandCorner && !(root.islandBottom && root.islandRight) ? 0 : radius
+    topRightRadius: root.islandCorner && !(root.islandBottom && !root.islandRight) ? 0 : radius
+    bottomLeftRadius: root.islandCorner && !(!root.islandBottom && root.islandRight) ? 0 : radius
+    bottomRightRadius: root.islandCorner && !(!root.islandBottom && !root.islandRight) ? 0 : radius
       }
       Rectangle {
         id: islandMask
         anchors.fill: parent
         radius: islandShape.radius
+        topLeftRadius: islandShape.topLeftRadius
+        topRightRadius: islandShape.topRightRadius
+        bottomLeftRadius: islandShape.bottomLeftRadius
+        bottomRightRadius: islandShape.bottomRightRadius
         visible: false
         layer.enabled: true
       }

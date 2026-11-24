@@ -137,6 +137,9 @@ Item {
   property real pillY: 7
   property real pillX: -1
   property bool islandBottom: false
+  property string islandPosition: "top-center"
+  readonly property bool islandCorner: !islandPosition.endsWith("-center")
+  readonly property bool islandRight: islandPosition.endsWith("-right")
   FileView {
     path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/island-pill.json"
     watchChanges: true
@@ -149,7 +152,8 @@ Item {
         root.pillH = Number(g.h) || root.pillH
         root.pillY = isNaN(Number(g.y)) ? root.pillY : Number(g.y)
         root.pillX = typeof g.x === "number" ? g.x : -1
-        root.islandBottom = typeof g.position === "string" && g.position.startsWith("bottom-")
+        root.islandPosition = typeof g.position === "string" ? g.position : "top-center"
+        root.islandBottom = root.islandPosition.startsWith("bottom-")
       } catch (e) {}
     }
   }
@@ -1384,7 +1388,7 @@ Item {
     property int maxRowsHeight: -1
     readonly property int centeredTop: Math.max(Style.gapsOut, Math.round((height - root.cardHeight) / 2))
     // omarchy-island: the menu grows out of the island, at the top center.
-    readonly property int effectiveCardTop: root.islandBottom ? Math.max(Style.gapsOut, height - root.islandTop - root.cardHeight) : root.islandTop
+    readonly property int effectiveCardTop: root.islandCorner ? (root.islandBottom ? height - root.cardHeight : 0) : root.islandBottom ? Math.max(Style.gapsOut, height - root.islandTop - root.cardHeight) : root.islandTop
     function freezeCardTop() {
       if (shown && cardTop < 0) {
         cardTop = effectiveCardTop
@@ -1417,8 +1421,8 @@ Item {
       Behavior on sizeH { enabled: morphBox.settled; SpringAnimation { spring: 3.4; damping: 0.34; epsilon: 0.3 } }
       width: Math.max(1, sizeW)
       height: Math.max(1, sizeH)
-      x: root.pillX < 0 ? (parent.width - width) / 2 : Math.max(Style.gapsOut, Math.min(root.pillX + root.pillW / 2 - width / 2, parent.width - width - Style.gapsOut))
-      y: root.pillY + (panel.effectiveCardTop - root.pillY) * Math.min(1, root.morph)
+      x: root.islandCorner ? (root.islandRight ? parent.width - width : 0) : root.pillX < 0 ? (parent.width - width) / 2 : Math.max(Style.gapsOut, Math.min(root.pillX + root.pillW / 2 - width / 2, parent.width - width - Style.gapsOut))
+      y: root.islandCorner ? (root.islandBottom ? parent.height - height : 0) : root.pillY + (panel.effectiveCardTop - root.pillY) * Math.min(1, root.morph)
 
       RectangularShadow {
         anchors.fill: morphShape
@@ -1432,6 +1436,10 @@ Item {
         anchors.fill: parent
         color: root.islandBlack
         radius: Math.min(height / 2, root.pillH / 2 + (root.islandRadius - root.pillH / 2) * Math.min(1, Math.max(0, root.morph)))
+    topLeftRadius: root.islandCorner && !(root.islandBottom && root.islandRight) ? 0 : radius
+    topRightRadius: root.islandCorner && !(root.islandBottom && !root.islandRight) ? 0 : radius
+    bottomLeftRadius: root.islandCorner && !(!root.islandBottom && root.islandRight) ? 0 : radius
+    bottomRightRadius: root.islandCorner && !(!root.islandBottom && !root.islandRight) ? 0 : radius
       }
 
       // The content is clipped by the shape (rounded corners included).
@@ -1869,6 +1877,10 @@ Item {
         id: clipMask
         anchors.fill: parent
         radius: morphShape.radius
+        topLeftRadius: morphShape.topLeftRadius
+        topRightRadius: morphShape.topRightRadius
+        bottomLeftRadius: morphShape.bottomLeftRadius
+        bottomRightRadius: morphShape.bottomRightRadius
         visible: false
         layer.enabled: true
       }

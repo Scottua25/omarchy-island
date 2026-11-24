@@ -54,8 +54,10 @@ ShellRoot {
   readonly property string position: ["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"].includes(userSettings.position) ? userSettings.position : "top-center"
   readonly property bool bottomEdge: position.startsWith("bottom-")
   readonly property string horizontalPosition: position.split("-")[1]
+  readonly property bool atCorner: horizontalPosition !== "center"
+  readonly property bool atRight: horizontalPosition === "right"
   function islandCenter(screenWidth, idleWidth) {
-    const pad = 22
+    const pad = 0
     return horizontalPosition === "left" ? pad + idleWidth / 2 : horizontalPosition === "right" ? screenWidth - pad - idleWidth / 2 : screenWidth / 2
   }
   readonly property string notchMode: ["all", "browser", "off"].includes(userSettings.notchMode) ? userSettings.notchMode : "all"
@@ -1018,7 +1020,7 @@ ShellRoot {
       // and the window border wraps around it.
       readonly property bool notchScreen: !fullscreenHere && root.notchOk(hyprMonitor ? hyprMonitor.activeWorkspace : null, modelData)
       readonly property real notchScale: root.configuredNotchScale
-      readonly property int notchTop: 3
+      readonly property int notchTop: root.atCorner ? 0 : 3
       // Focused window on this screen's workspace: the notch border takes the same
       // active/inactive color Hyprland gives the window it belongs to.
       readonly property var focusIpc: {
@@ -1059,7 +1061,7 @@ ShellRoot {
       // Clock only: narrow pill, 14 px per side. A bit more with ears.
       readonly property real idleWidth: idleRow.implicitWidth + 28
       readonly property real desiredCenter: root.islandCenter(win.width, win.idleWidth)
-      readonly property real pillCenter: Math.max(win.targetSize.width / 2 + 12, Math.min(win.width - win.targetSize.width / 2 - 12, desiredCenter))
+      readonly property real pillCenter: root.atCorner ? (root.atRight ? win.width - pill.width / 2 : pill.width / 2) : win.width / 2
       readonly property real restWidth: root.mode === "ws" ? wsRow.implicitWidth + 36 : idleWidth
       // Notification = a real pill: a single band, taller only if the text wraps to two lines.
       readonly property real notifHeight: !notif.body ? 56 : (notif.body.length > 52 ? 80 : 68)
@@ -1105,7 +1107,7 @@ ShellRoot {
       Binding { target: root; property: "shotTargetRadius"; when: !!win.hyprMonitor && win.hyprMonitor.focused; value: win.thumbH / 2 }
 
       // Idle pill geometry, for the menu that takes on its shape.
-      readonly property string pillGeometry: JSON.stringify({ w: Math.round(win.idleWidth), h: root.idleHeight, x: Math.round(win.desiredCenter - win.idleWidth / 2), y: root.bottomEdge ? win.height - root.pillTop - root.idleHeight : root.pillTop, position: root.position })
+      readonly property string pillGeometry: JSON.stringify({ w: Math.round(win.idleWidth), h: root.idleHeight, x: Math.round(win.desiredCenter - win.idleWidth / 2), y: root.bottomEdge ? win.height - (root.atCorner ? 0 : root.pillTop) - root.idleHeight : (root.atCorner ? 0 : root.pillTop), position: root.position })
       onPillGeometryChanged: pillFile.setText(pillGeometry)
       FileView {
         id: pillFile
@@ -1335,7 +1337,7 @@ ShellRoot {
       Item {
         id: notchLayer
         // Fades in and out while the pill shrinks.
-        opacity: win.notchDrawn ? 1 : 0
+        opacity: win.notchDrawn && !root.atCorner ? 1 : 0
         // During a workspace slide: gone at once (a fade-out would hang in mid-air).
         visible: opacity > 0 && !root.wsSliding
         Behavior on opacity { enabled: root.animate; NumberAnimation { duration: win.notchDrawn ? 260 : 120; easing.type: Easing.OutCubic } }
@@ -1484,13 +1486,43 @@ ShellRoot {
         }
       }
 
+      // At a corner the window border follows only the island's two exposed
+      // edges. Mirror the same path for the other three corners.
+      Item {
+        id: cornerOutline
+        x: 0; y: root.bottomEdge ? win.height - height : 0
+        width: win.width; height: 90
+        visible: root.atCorner && win.notchDrawn
+        transform: Scale { origin.x: cornerOutline.width / 2; origin.y: cornerOutline.height / 2; xScale: root.atRight ? -1 : 1; yScale: root.bottomEdge ? -1 : 1 }
+        readonly property real outerW: pill.width * pill.scale + 5
+        readonly property real outerH: pill.height * pill.scale + 5
+        readonly property real edge: root.gapsOut
+        readonly property real curve: Math.max(2, Math.min(12, (outerH - edge) / 2))
+        Shape {
+          anchors.fill: parent
+          preferredRendererType: Shape.CurveRenderer
+          ShapePath {
+            strokeWidth: 2
+            strokeColor: win.centerFocused ? root.borderColor : root.inactiveBorderColor
+            fillColor: "transparent"
+            capStyle: ShapePath.FlatCap
+            startX: cornerOutline.outerW + cornerOutline.curve; startY: cornerOutline.edge
+            PathQuad { x: cornerOutline.outerW; y: cornerOutline.edge + cornerOutline.curve; controlX: cornerOutline.outerW; controlY: cornerOutline.edge }
+            PathLine { x: cornerOutline.outerW; y: cornerOutline.outerH - cornerOutline.curve }
+            PathQuad { x: cornerOutline.outerW - cornerOutline.curve; y: cornerOutline.outerH; controlX: cornerOutline.outerW; controlY: cornerOutline.outerH }
+            PathLine { x: cornerOutline.edge + cornerOutline.curve; y: cornerOutline.outerH }
+            PathQuad { x: cornerOutline.edge; y: cornerOutline.outerH + cornerOutline.curve; controlX: cornerOutline.edge; controlY: cornerOutline.outerH }
+          }
+        }
+      }
+
       Rectangle {
         id: pill
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.horizontalCenterOffset: win.pillCenter - win.width / 2 + root.shakeX
         // With the notch the pill gets smaller and moves up: it covers less of the page.
-        y: root.bottomEdge ? win.height - height - (win.notch ? win.notchTop : root.pillTop) : (win.notch ? win.notchTop : root.pillTop)
-        transformOrigin: root.bottomEdge ? Item.Bottom : Item.Top
+        y: root.bottomEdge ? win.height - height - (root.atCorner ? 0 : (win.notch ? win.notchTop : root.pillTop)) : (root.atCorner ? 0 : (win.notch ? win.notchTop : root.pillTop))
+        transformOrigin: root.atCorner ? (root.bottomEdge ? (root.atRight ? Item.BottomRight : Item.BottomLeft) : (root.atRight ? Item.TopRight : Item.TopLeft)) : (root.bottomEdge ? Item.Bottom : Item.Top)
         scale: (win.notch ? win.notchScale : 1) * root.gulp
         Behavior on y { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         Behavior on scale { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -1508,6 +1540,10 @@ ShellRoot {
         width: win.targetSize.width
         height: win.targetSize.height
         radius: Math.min(win.targetRadius, height / 2)
+        topLeftRadius: root.atCorner && !(root.bottomEdge && root.atRight) ? 0 : radius
+        topRightRadius: root.atCorner && !(root.bottomEdge && !root.atRight) ? 0 : radius
+        bottomLeftRadius: root.atCorner && !(!root.bottomEdge && root.atRight) ? 0 : radius
+        bottomRightRadius: root.atCorner && !(!root.bottomEdge && !root.atRight) ? 0 : radius
         color: root.pillColor
         clip: true
         antialiasing: true
