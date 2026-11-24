@@ -13,6 +13,8 @@
 #      under the island
 #   5. installs a systemd user service and an Omarchy post-update hook
 set -euo pipefail
+# Plugin reloads can temporarily keep the shell busy longer than its 2s default.
+export OMARCHY_SHELL_IPC_TIMEOUT=${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
 source "$(dirname "$(readlink -f "$0")")/tools/lib.sh"
 
 START=1

@@ -34,6 +34,25 @@ import Quickshell.Services.UPower
 ShellRoot {
   id: root
 
+  // User settings are kept outside the checkout and reload on save.
+  property var userSettings: ({})
+  FileView {
+    id: settingsFile
+    path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy-island/settings.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        const data = JSON.parse(text())
+        if (data && typeof data === "object" && !Array.isArray(data)) root.userSettings = data
+      } catch (e) { console.warn("Island settings: invalid JSON; keeping previous settings") }
+    }
+  }
+  readonly property string clockFormat: typeof userSettings.clockFormat === "string" && userSettings.clockFormat.length > 0 ? userSettings.clockFormat : "h:mm AP"
+  readonly property real configuredNotchScale: typeof userSettings.notchScale === "number" && isFinite(userSettings.notchScale) ? Math.max(0.5, Math.min(1, userSettings.notchScale)) : 0.95
+  readonly property string notchMode: ["all", "browser", "off"].includes(userSettings.notchMode) ? userSettings.notchMode : "all"
+
   // ── Animations ────────────────────────────────────────────────────────────
   // Same as the Omarchy shell: off when `omarchy toggle animations` has turned
   // off Hyprland's. Re-read on every config reload.
@@ -264,7 +283,7 @@ ShellRoot {
   // ── Clock ─────────────────────────────────────────────────────────────────
   SystemClock { id: clock; precision: SystemClock.Seconds }
   readonly property var itLocale: Qt.locale()
-  readonly property string timeText: Qt.formatTime(clock.date, "HH:mm")
+  readonly property string timeText: Qt.formatTime(clock.date, root.clockFormat)
   readonly property string dateText: {
     const s = clock.date.toLocaleDateString(itLocale, "dddd d MMMM")
     return s.charAt(0).toUpperCase() + s.slice(1)
@@ -739,13 +758,8 @@ ShellRoot {
     }
   }
 
-  // Can the windows go all the way to the top, with the pill as a notch over them?
-  // Yes when the screen center (where the pill sits) is either a browser or the gap
-  // between two windows (2 columns: the notch bridges them). A terminal or any other
-  // app under the pill keeps the strip, so its first line stays visible. A single
-  // non-browser window (terminal/Files at 80%) is under the pill: strip stays.
-  // ISLAND_NOTCH=off: never a notch, the strip stays everywhere.
-  readonly property bool notchEnabled: Quickshell.env("ISLAND_NOTCH") !== "off"
+  // In browser mode retain the upstream rule; all also permits terminals.
+  readonly property bool notchEnabled: Quickshell.env("ISLAND_NOTCH") !== "off" && root.notchMode !== "off"
   function notchOk(ws, screen) {
     if (!root.notchEnabled || !ws || !ws.toplevels || !screen) return false
     const cx = screen.x + screen.width / 2
@@ -754,7 +768,7 @@ ShellRoot {
       const ipc = t.lastIpcObject || {}
       if (ipc.floating || !ipc.at || !ipc.size) continue
       tiled++
-      if (ipc.at[0] <= cx && cx <= ipc.at[0] + ipc.size[0]) {
+      if (root.notchMode === "browser" && ipc.at[0] <= cx && cx <= ipc.at[0] + ipc.size[0]) {
         const app = (t.wayland && t.wayland.appId) || ipc.class || ""
         if (!root.isBrowser(app)) return false
       }
@@ -994,7 +1008,7 @@ ShellRoot {
       // Windows up to the top (see notchOk): when idle the pill becomes a notch
       // and the window border wraps around it.
       readonly property bool notchScreen: !fullscreenHere && root.notchOk(hyprMonitor ? hyprMonitor.activeWorkspace : null, modelData)
-      readonly property real notchScale: 0.76
+      readonly property real notchScale: root.configuredNotchScale
       readonly property int notchTop: 3
       // Focused window on this screen's workspace: the notch border takes the same
       // active/inactive color Hyprland gives the window it belongs to.
