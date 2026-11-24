@@ -1020,7 +1020,7 @@ ShellRoot {
       // and the window border wraps around it.
       readonly property bool notchScreen: !fullscreenHere && root.notchOk(hyprMonitor ? hyprMonitor.activeWorkspace : null, modelData)
       readonly property real notchScale: root.configuredNotchScale
-      readonly property int notchTop: root.atCorner ? 0 : 3
+      readonly property int notchTop: 0
       // Focused window on this screen's workspace: the notch border takes the same
       // active/inactive color Hyprland gives the window it belongs to.
       readonly property var focusIpc: {
@@ -1218,7 +1218,7 @@ ShellRoot {
           ? (root.atRight
              ? win.width - win.restWidth * win.notchScale - (6 + slot * (root.idleHeight + 6) + extra) * win.notchScale - width * (1 + win.notchScale) / 2
              : win.restWidth * win.notchScale + (6 + slot * (root.idleHeight + 6) + extra) * win.notchScale - width * (1 - win.notchScale) / 2)
-          : win.pillCenter + win.restWidth * win.notchScale / 2 + 6 * win.notchScale - width * (1 - win.notchScale) / 2
+          : win.pillCenter + win.restWidth * win.notchScale / 2 + (6 + slot * (root.idleHeight + 6) + extra) * win.notchScale - width * (1 - win.notchScale) / 2
         readonly property real notchY: win.notchTop - height * (1 - win.notchScale) / 2
         y: root.bottomEdge ? win.height - height - (docked ? (root.atCorner ? 0 : root.pillTop) + 30 - height / 2 : notched ? notchY : root.pillTop) : (docked ? (root.atCorner ? 0 : root.pillTop) + 30 - height / 2 : notched ? notchY : root.pillTop)
         // Follow the pill's moving center directly while animating only the
@@ -1254,7 +1254,7 @@ ShellRoot {
         id: satCaffeine
         on: root.stayAwake
         hoverIsland: true
-        inNotch: root.atCorner
+        inNotch: true
         slot: 0
         glyph: "󰅶"
         onClicked: root.toggleCaffeine()
@@ -1263,7 +1263,7 @@ ShellRoot {
         id: satDnd
         on: root.dnd
         hoverIsland: true
-        inNotch: root.atCorner
+        inNotch: true
         slot: root.stayAwake ? 1 : 0
         glyph: "󰂛"
         glyphColor: root.subColor
@@ -1386,205 +1386,57 @@ ShellRoot {
         color: Qt.rgba(0, 0, 0, 0.42)
       }
 
-      // ── Notch: the browser border dips down and wraps around the pill ───
-      // A window can't have a hole punched in it: the island redraws the desktop
-      // background inside the notch shape, so the browser looks carved out.
+      // The attached outline includes the pill and any visible indicators.
+      // Its screen-edge corners are square; only corners facing inward curve.
       Item {
-        id: notchLayer
-        // Fades in and out while the pill shrinks.
-        opacity: win.notchDrawn && !root.atCorner ? 1 : 0
-        // During a workspace slide: gone at once (a fade-out would hang in mid-air).
-        visible: opacity > 0 && !root.wsSliding
-        Behavior on opacity { enabled: root.animate; NumberAnimation { duration: win.notchDrawn ? 260 : 120; easing.type: Easing.OutCubic } }
-        // Full-screen coordinates (the island window is centered).
-        readonly property real offsetX: 0
-        x: 0; y: root.bottomEdge ? win.height - height : 0
-        transform: Scale { origin.y: 32; yScale: root.bottomEdge ? -1 : 1 }
-        width: win.modelData.width
-        height: 64
-        // Shape: the border follows the pill at a constant distance (same centers
-        // as its corners, radius + m) and joins the browser border with two
-        // tangent arcs: no corners, no crooked straight segments.
-        readonly property real m: 4                       // pill ↔ border gap
-        readonly property real r: 9                       // fillet radius with the top border
-        readonly property real edgeY: root.gapsOut        // browser top border
-        // Pill as rendered (scaled down from the top).
-        readonly property real pw: pill.width * pill.scale
-        readonly property real ph: pill.height * pill.scale
-        readonly property real pl: offsetX + pill.x + (pill.width - pw) / 2
-        readonly property real pr: Math.min(pill.radius * pill.scale, ph / 2)   // pill corner radius
-        readonly property real big: pr + m                                       // border radius
-        readonly property real cy: (root.bottomEdge ? win.height - (pill.y + pill.height) : pill.y) + ph - pr                              // bottom corner centers
-        readonly property real cxL: pl + pr
-        // Shelf satellite next to the pill: the notch reaches it too.
-        readonly property real cxR: Math.max(pl + pw, satShelf.notched && satShelf.opacity > 0 ? offsetX + satShelf.drawnRight : 0) - pr
-        // Fillet centers: r below the border, tangent to the big circle.
-        readonly property real fy: edgeY + r
-        readonly property real fdx: Math.sqrt(Math.max(0, (big + r) * (big + r) - (fy - cy) * (fy - cy)))
-        readonly property real fxL: cxL - fdx
-        readonly property real fxR: cxR + fdx
-        // Tangent point on the circle of radius big+o (o = stroke offset).
-        function tx(side, o) { const cx = side < 0 ? cxL : cxR, fx = side < 0 ? fxL : fxR; return cx + (fx - cx) * (big + o) / (big + r) }
-        function ty(o) { return cy + (fy - cy) * (big + o) / (big + r) }
-        // Bridge (gap between two windows under the pill): outer edges of the two
-        // window borders (Hyprland draws them outside the window, bw wide) and the
-        // bottom of the notch. Each window corner is rounded with radius r.
-        readonly property real bw: 2
-        readonly property real eL: win.notchGap ? win.notchGap.l + bw : 0
-        readonly property real eR: win.notchGap ? win.notchGap.r - bw : 0
-        readonly property real yb: cy + big
-        // The window corners shrink when the pill is narrow (clock only), so the
-        // bridge holds for every pill width (no flipping while it animates).
-        readonly property real rcL: Math.max(1.5, Math.min(r, eL - cxL))
-        readonly property real rcR: Math.max(1.5, Math.min(r, cxR - eR))
-        readonly property bool bridge: !!win.notchGap && eL - 1.5 > cxL && eR + 1.5 < cxR && eL < eR
-
-        Item {
-          id: wallStrip
-          anchors.fill: parent
-          clip: true
-          visible: false
-          layer.enabled: true
-          Image {
-            width: win.modelData.width
-            height: win.modelData.height
-            source: "file://" + Quickshell.env("HOME") + "/.local/state/omarchy/current/background?r=" + root.wallRev
-            fillMode: Image.PreserveAspectCrop
-            sourceSize: Qt.size(win.modelData.width * 2, win.modelData.height * 2)
-            cache: false
-          }
-        }
-        // Same outline for the mask (o = 0) and the border (o = 1, half the stroke width).
-        component NotchPath: ShapePath {
-          property real o: 0
-          startX: notchLayer.fxL; startY: notchLayer.edgeY + o
-          PathArc { x: notchLayer.tx(-1, o); y: notchLayer.ty(o); radiusX: notchLayer.r - o; radiusY: notchLayer.r - o; direction: PathArc.Clockwise }
-          PathArc { x: notchLayer.cxL; y: notchLayer.cy + notchLayer.big + o; radiusX: notchLayer.big + o; radiusY: notchLayer.big + o; direction: PathArc.Counterclockwise }
-          PathLine { x: notchLayer.cxR; y: notchLayer.cy + notchLayer.big + o }
-          PathArc { x: notchLayer.tx(1, o); y: notchLayer.ty(o); radiusX: notchLayer.big + o; radiusY: notchLayer.big + o; direction: PathArc.Counterclockwise }
-          PathArc { x: notchLayer.fxR; y: notchLayer.edgeY + o; radiusX: notchLayer.r - o; radiusY: notchLayer.r - o; direction: PathArc.Clockwise }
-        }
-        Shape {
-          id: notchMask
-          anchors.fill: parent
-          visible: false
-          layer.enabled: true
-          preferredRendererType: Shape.CurveRenderer
-          NotchPath {
-            strokeWidth: -1
-            fillColor: notchLayer.bridge ? "transparent" : "black"
-            PathLine { x: notchLayer.fxR; y: notchLayer.edgeY - 1 }
-            PathLine { x: notchLayer.fxL; y: notchLayer.edgeY - 1 }
-          }
-          // Bridge: same notch plus the two rounded window corners and the gap.
-          ShapePath {
-            startX: notchLayer.fxL; startY: notchLayer.edgeY
-            PathArc { x: notchLayer.tx(-1, 0); y: notchLayer.ty(0); radiusX: notchLayer.r; radiusY: notchLayer.r; direction: PathArc.Clockwise }
-            PathArc { x: notchLayer.cxL; y: notchLayer.yb; radiusX: notchLayer.big; radiusY: notchLayer.big; direction: PathArc.Counterclockwise }
-            PathLine { x: notchLayer.eL - notchLayer.rcL; y: notchLayer.yb }
-            PathArc { x: notchLayer.eL; y: notchLayer.yb + notchLayer.rcL; radiusX: notchLayer.rcL; radiusY: notchLayer.rcL; direction: PathArc.Clockwise }
-            strokeWidth: -1
-            fillColor: notchLayer.bridge ? "black" : "transparent"
-            PathLine { x: notchLayer.eR; y: notchLayer.yb + notchLayer.rcR }
-            PathArc { x: notchLayer.eR + notchLayer.rcR; y: notchLayer.yb; radiusX: notchLayer.rcR; radiusY: notchLayer.rcR; direction: PathArc.Clockwise }
-            PathLine { x: notchLayer.cxR; y: notchLayer.yb }
-            PathArc { x: notchLayer.tx(1, 0); y: notchLayer.ty(0); radiusX: notchLayer.big; radiusY: notchLayer.big; direction: PathArc.Counterclockwise }
-            PathArc { x: notchLayer.fxR; y: notchLayer.edgeY; radiusX: notchLayer.r; radiusY: notchLayer.r; direction: PathArc.Clockwise }
-            PathLine { x: notchLayer.fxR; y: notchLayer.edgeY - 1 }
-            PathLine { x: notchLayer.fxL; y: notchLayer.edgeY - 1 }
-          }
-        }
-        MultiEffect {
-          anchors.fill: parent
-          source: wallStrip
-          maskEnabled: true
-          maskSource: notchMask
-          maskThresholdMin: 0.5
-          maskSpreadAtMin: 1.0
-        }
-        // Bridge: two separate borders, one per window.
-        Shape {
-          anchors.fill: parent
-          visible: notchLayer.bridge
-          preferredRendererType: Shape.CurveRenderer
-          // Left window: around the pill, then down its own side.
-          ShapePath {
-            strokeWidth: 2; strokeColor: win.focusedEdge(true) ? root.borderColor : root.inactiveBorderColor; fillColor: "transparent"; capStyle: ShapePath.FlatCap
-            startX: notchLayer.fxL; startY: notchLayer.edgeY + 1
-            PathArc { x: notchLayer.tx(-1, 1); y: notchLayer.ty(1); radiusX: notchLayer.r - 1; radiusY: notchLayer.r - 1; direction: PathArc.Clockwise }
-            PathArc { x: notchLayer.cxL; y: notchLayer.yb + 1; radiusX: notchLayer.big + 1; radiusY: notchLayer.big + 1; direction: PathArc.Counterclockwise }
-            PathLine { x: notchLayer.eL - notchLayer.rcL; y: notchLayer.yb + 1 }
-            PathArc { x: notchLayer.eL - 1; y: notchLayer.yb + notchLayer.rcL; radiusX: Math.max(0.5, notchLayer.rcL - 1); radiusY: Math.max(0.5, notchLayer.rcL - 1); direction: PathArc.Clockwise }
-          }
-          // Right window: up its own side, around the pill, back to the top border.
-          ShapePath {
-            strokeWidth: 2; strokeColor: win.focusedEdge(false) ? root.borderColor : root.inactiveBorderColor; fillColor: "transparent"; capStyle: ShapePath.FlatCap
-            startX: notchLayer.eR + 1; startY: notchLayer.yb + notchLayer.rcR
-            PathArc { x: notchLayer.eR + notchLayer.rcR; y: notchLayer.yb + 1; radiusX: Math.max(0.5, notchLayer.rcR - 1); radiusY: Math.max(0.5, notchLayer.rcR - 1); direction: PathArc.Clockwise }
-            PathLine { x: notchLayer.cxR; y: notchLayer.yb + 1 }
-            PathArc { x: notchLayer.tx(1, 1); y: notchLayer.ty(1); radiusX: notchLayer.big + 1; radiusY: notchLayer.big + 1; direction: PathArc.Counterclockwise }
-            PathArc { x: notchLayer.fxR; y: notchLayer.edgeY + 1; radiusX: notchLayer.r - 1; radiusY: notchLayer.r - 1; direction: PathArc.Clockwise }
-          }
-        }
-        // The Hyprland border continues along the notch.
-        Shape {
-          anchors.fill: parent
-          visible: !notchLayer.bridge
-          preferredRendererType: Shape.CurveRenderer
-          NotchPath {
-            o: 1
-            strokeWidth: 2
-            strokeColor: win.centerFocused ? root.borderColor : root.inactiveBorderColor
-            fillColor: "transparent"
-            capStyle: ShapePath.FlatCap
-          }
-        }
-      }
-
-      // At a corner the window border follows only the island's two exposed
-      // edges. Mirror the same path for the other three corners.
-      Item {
-        id: cornerOutline
+        id: attachedOutline
         x: 0; y: root.bottomEdge ? win.height - height : 0
         width: win.width; height: 90
-        visible: root.atCorner && win.notchDrawn
-        transform: Scale { origin.x: cornerOutline.width / 2; origin.y: cornerOutline.height / 2; xScale: root.atRight ? -1 : 1; yScale: root.bottomEdge ? -1 : 1 }
-        // Put the stroke directly against the visible pill. The opaque fill
-        // covers the window's original border beneath the replacement outline.
-        readonly property real outerW: pill.width * pill.scale + 0.5
-        readonly property real outerH: pill.height * pill.scale + 0.5
-        readonly property real edge: root.gapsOut
-        readonly property real curve: Math.max(2, Math.min(12, (outerH - edge) / 2))
-        readonly property real innerCurve: Math.min(pill.radius * pill.scale, outerH - edge)
+        visible: win.notchDrawn
+        transform: Scale { origin.y: attachedOutline.height / 2; yScale: root.bottomEdge ? -1 : 1 }
+
+        readonly property real pillLeft: root.atCorner
+          ? (root.atRight ? win.width - pill.width * pill.scale : 0)
+          : pill.x + (pill.width - pill.width * pill.scale) / 2
+        readonly property real pillRight: pillLeft + pill.width * pill.scale
+        function leftOf(sat) { return sat.x + sat.width / 2 - sat.width * sat.scale / 2 }
+        function rightOf(sat) { return sat.x + sat.width / 2 + sat.width * sat.scale / 2 }
+        function included(sat) { return sat.notched && sat.on && sat.opacity > 0.01 }
+        readonly property real leftEdge: Math.max(0, Math.min(pillLeft,
+          included(satCaffeine) ? leftOf(satCaffeine) : pillLeft,
+          included(satDnd) ? leftOf(satDnd) : pillLeft,
+          included(satShelf) ? leftOf(satShelf) : pillLeft))
+        readonly property real rightEdge: Math.min(width, Math.max(pillRight,
+          included(satCaffeine) ? rightOf(satCaffeine) : pillRight,
+          included(satDnd) ? rightOf(satDnd) : pillRight,
+          included(satShelf) ? rightOf(satShelf) : pillRight))
+        readonly property real depth: pill.height * pill.scale + 0.5
+        readonly property real radius: Math.min(pill.radius * pill.scale, depth / 2, (rightEdge - leftEdge) / 2)
+        readonly property real leftRadius: root.atCorner && !root.atRight ? 0 : radius
+        readonly property real rightRadius: root.atCorner && root.atRight ? 0 : radius
+
         Shape {
           anchors.fill: parent
           preferredRendererType: Shape.CurveRenderer
-          // Fill the area behind the island and its corner joins, hiding the
-          // compositor's original window border before drawing the new one.
+          // Opaque fill masks the original window border behind the outline.
           ShapePath {
-            strokeWidth: -1
-            fillColor: root.pillColor
-            startX: cornerOutline.outerW + cornerOutline.curve; startY: cornerOutline.edge
-            PathQuad { x: cornerOutline.outerW; y: cornerOutline.edge + cornerOutline.curve; controlX: cornerOutline.outerW; controlY: cornerOutline.edge }
-            PathLine { x: cornerOutline.outerW; y: cornerOutline.outerH - cornerOutline.innerCurve }
-            PathQuad { x: cornerOutline.outerW - cornerOutline.innerCurve; y: cornerOutline.outerH; controlX: cornerOutline.outerW; controlY: cornerOutline.outerH }
-            PathLine { x: cornerOutline.edge + cornerOutline.curve; y: cornerOutline.outerH }
-            PathQuad { x: cornerOutline.edge; y: cornerOutline.outerH + cornerOutline.curve; controlX: cornerOutline.edge; controlY: cornerOutline.outerH }
-            PathLine { x: 0; y: cornerOutline.outerH + cornerOutline.curve }
-            PathLine { x: 0; y: 0 }
-            PathLine { x: cornerOutline.outerW + cornerOutline.curve; y: 0 }
+            strokeWidth: -1; fillColor: root.pillColor
+            startX: attachedOutline.leftEdge; startY: 0
+            PathLine { x: attachedOutline.leftEdge; y: attachedOutline.depth - attachedOutline.leftRadius }
+            PathQuad { x: attachedOutline.leftEdge + attachedOutline.leftRadius; y: attachedOutline.depth; controlX: attachedOutline.leftEdge; controlY: attachedOutline.depth }
+            PathLine { x: attachedOutline.rightEdge - attachedOutline.rightRadius; y: attachedOutline.depth }
+            PathQuad { x: attachedOutline.rightEdge; y: attachedOutline.depth - attachedOutline.rightRadius; controlX: attachedOutline.rightEdge; controlY: attachedOutline.depth }
+            PathLine { x: attachedOutline.rightEdge; y: 0 }
           }
           ShapePath {
-            strokeWidth: 2
+            strokeWidth: 2; fillColor: "transparent"; capStyle: ShapePath.FlatCap
             strokeColor: win.centerFocused ? root.borderColor : root.inactiveBorderColor
-            fillColor: "transparent"
-            capStyle: ShapePath.FlatCap
-            startX: cornerOutline.outerW + cornerOutline.curve; startY: cornerOutline.edge
-            PathQuad { x: cornerOutline.outerW; y: cornerOutline.edge + cornerOutline.curve; controlX: cornerOutline.outerW; controlY: cornerOutline.edge }
-            PathLine { x: cornerOutline.outerW; y: cornerOutline.outerH - cornerOutline.innerCurve }
-            PathQuad { x: cornerOutline.outerW - cornerOutline.innerCurve; y: cornerOutline.outerH; controlX: cornerOutline.outerW; controlY: cornerOutline.outerH }
-            PathLine { x: cornerOutline.edge + cornerOutline.curve; y: cornerOutline.outerH }
-            PathQuad { x: cornerOutline.edge; y: cornerOutline.outerH + cornerOutline.curve; controlX: cornerOutline.edge; controlY: cornerOutline.outerH }
+            startX: attachedOutline.leftEdge; startY: 0
+            PathLine { x: attachedOutline.leftEdge; y: attachedOutline.depth - attachedOutline.leftRadius }
+            PathQuad { x: attachedOutline.leftEdge + attachedOutline.leftRadius; y: attachedOutline.depth; controlX: attachedOutline.leftEdge; controlY: attachedOutline.depth }
+            PathLine { x: attachedOutline.rightEdge - attachedOutline.rightRadius; y: attachedOutline.depth }
+            PathQuad { x: attachedOutline.rightEdge; y: attachedOutline.depth - attachedOutline.rightRadius; controlX: attachedOutline.rightEdge; controlY: attachedOutline.depth }
+            PathLine { x: attachedOutline.rightEdge; y: 0 }
           }
         }
       }
@@ -1615,10 +1467,10 @@ ShellRoot {
         width: win.targetSize.width
         height: win.targetSize.height
         radius: Math.min(win.targetRadius, height / 2)
-        topLeftRadius: root.atCorner && !(root.bottomEdge && root.atRight) ? 0 : radius
-        topRightRadius: root.atCorner && !(root.bottomEdge && !root.atRight) ? 0 : radius
-        bottomLeftRadius: root.atCorner && !(!root.bottomEdge && root.atRight) ? 0 : radius
-        bottomRightRadius: root.atCorner && !(!root.bottomEdge && !root.atRight) ? 0 : radius
+        topLeftRadius: root.atCorner ? (root.bottomEdge && root.atRight ? radius : 0) : (win.notch && !root.bottomEdge ? 0 : radius)
+        topRightRadius: root.atCorner ? (root.bottomEdge && !root.atRight ? radius : 0) : (win.notch && !root.bottomEdge ? 0 : radius)
+        bottomLeftRadius: root.atCorner ? (!root.bottomEdge && root.atRight ? radius : 0) : (win.notch && root.bottomEdge ? 0 : radius)
+        bottomRightRadius: root.atCorner ? (!root.bottomEdge && !root.atRight ? radius : 0) : (win.notch && root.bottomEdge ? 0 : radius)
         color: root.pillColor
         clip: true
         antialiasing: true
