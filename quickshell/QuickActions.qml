@@ -4,7 +4,7 @@
 import QtQuick
 import QtQuick.Shapes
 
-Row {
+Item {
   id: quick
   property bool compact: false
   property real pct: 0               // 0..1
@@ -26,12 +26,34 @@ Row {
   signal expand()          // opens the full dashboard (click on the time)
   property string timeText: ""
   property string displayFont: "sans"
+  // Full corner layouts start at the screen edge; center and compact layouts
+  // retain the original order.
+  property string cornerPosition: ""
+  readonly property var controlOrder: compact ? ["battery", "shot"]
+    : cornerPosition.endsWith("-left") ? ["clock", "caffeine", "dnd", "shot", "battery"]
+    : cornerPosition.endsWith("-right") ? ["battery", "shot", "dnd", "caffeine", "clock"]
+    : ["battery", "shot", "clock", "caffeine", "dnd"]
+  property real spacing: 8
+  implicitWidth: 44 + (hasBattery ? 44 : 0) + (compact ? 0 : clockBox.width + 88)
+                 + (compact ? (hasBattery ? 1 : 0) : (hasBattery ? 4 : 3)) * spacing
+  implicitHeight: 44
+  width: implicitWidth
+  height: implicitHeight
 
-  spacing: 8
+  function controlX(id) {
+    let x = 0
+    for (const item of controlOrder) {
+      if (item === "battery" && !hasBattery) continue
+      if (item === id) return x
+      x += (item === "clock" ? clockBox.width : 44) + spacing
+    }
+    return x
+  }
 
   // Battery ring
   Item {
     id: batt
+    x: quick.controlX("battery")
     visible: quick.hasBattery
     width: 44; height: 44
     anchors.verticalCenter: parent.verticalCenter
@@ -73,6 +95,7 @@ Row {
       : [{ glyph: "󰹑", act: "shot" }]
     Rectangle {
       required property var modelData
+      x: quick.controlX(modelData.act)
       anchors.verticalCenter: parent.verticalCenter
       width: 44; height: 44; radius: 22
       color: modelData.on ? quick.accent : Qt.alpha(quick.textColor, hov.hovered ? 0.18 : 0.1)
@@ -109,12 +132,13 @@ Row {
   // Caffeine / do not disturb on: the button is the island's satellite,
   // which enters the pill and grows up to here. Centers in x (within the Row).
   property bool satellitesDock: false
-  readonly property real caffeineX: (hasBattery ? 52 : 0) + 52 + clockBox.width + 8 + 22
-  readonly property real dndX: caffeineX + 52
+  readonly property real caffeineX: controlX("caffeine") + 22
+  readonly property real dndX: controlX("dnd") + 22
 
   // The time in the middle: it's where the pointer lands; a click opens the dashboard.
   Item {
     id: clockBox
+    x: quick.controlX("clock")
     visible: !quick.compact
     anchors.verticalCenter: parent.verticalCenter
     width: clockLabel.implicitWidth + 28
@@ -144,6 +168,7 @@ Row {
     model: quick.compact ? [] : [{ glyph: "󰅶", act: "caffeine", on: quick.stayAwake }, { glyph: "󰂛", act: "dnd", on: quick.dnd }]
     Rectangle {
       required property var modelData
+      x: quick.controlX(modelData.act)
       anchors.verticalCenter: parent.verticalCenter
       width: 44; height: 44; radius: 22
       opacity: quick.satellitesDock && modelData.on ? 0 : 1

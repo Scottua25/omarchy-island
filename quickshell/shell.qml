@@ -2108,6 +2108,7 @@ ShellRoot {
         }
         QuickActions {
           id: quickFull
+          cornerPosition: root.atCorner ? root.position : ""
           clockHidden: true
           // The detached indicator fades away on expansion; the real button
           // remains the sole hover/click target while quick actions are open.
