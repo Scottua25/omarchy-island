@@ -1058,6 +1058,37 @@ ShellRoot {
         Region { item: satShelf }
       }
 
+      // The detached indicators and the pill are one hover target. Give the
+      // pointer time to cross the small gap or follow an expanding pill before
+      // treating it as having left the island.
+      function hoverChanged() {
+        if (pillHover.hovered || satCaffeine.hovered || satDnd.hovered) {
+          hoverTransfer.stop()
+          root.wsHovered = true
+          const wasHovered = root.pillHovered
+          root.pillHovered = true
+          playerLeaveTimer.stop()
+          if (!wasHovered && !root.playerOpen) playerHoverTimer.restart()
+          collapseTimer.stop()
+          shelfLeave.stop(); shelfIdle.stop()
+        } else {
+          hoverTransfer.restart()
+        }
+      }
+      Timer {
+        id: hoverTransfer
+        interval: 180
+        onTriggered: {
+          if (pillHover.hovered || satCaffeine.hovered || satDnd.hovered) return
+          root.wsHovered = false
+          root.pillHovered = false
+          playerHoverTimer.stop()
+          if (root.playerOpen) playerLeaveTimer.restart()
+          if (root.pinned || root.centerOpen) collapseTimer.restart()
+          if (root.shelfOpen) shelfLeave.restart()
+        }
+      }
+
       // Clock only: narrow pill, 14 px per side. A bit more with ears.
       readonly property real idleWidth: idleRow.implicitWidth + 28
       readonly property real desiredCenter: root.islandCenter(win.width, win.idleWidth)
@@ -1156,6 +1187,8 @@ ShellRoot {
         // Stays with the notch too (the shelf: otherwise unreachable in a browser):
         // shrunk like the pill, next to it, and the notch widens to wrap both.
         property bool inNotch: false
+        property bool hoverIsland: false
+        property alias hovered: satHover.hovered
         readonly property bool notched: inNotch && win.notch
         signal clicked()
         readonly property bool shown: on && win.calm && (!win.notch || inNotch) && (root.mode === "idle" || root.mode === "ws")
@@ -1181,7 +1214,11 @@ ShellRoot {
         radius: height / 2
         // With the notch: same scale as the pill, top-aligned with it (scale is
         // around the center, hence the offsets).
-        readonly property real notchRestX: root.horizontalPosition === "right" ? win.pillCenter - win.restWidth * win.notchScale / 2 - 6 * win.notchScale - width * (1 + win.notchScale) / 2 : win.pillCenter + win.restWidth * win.notchScale / 2 + 6 * win.notchScale - width * (1 - win.notchScale) / 2
+        readonly property real notchRestX: root.atCorner
+          ? (root.atRight
+             ? win.width - win.restWidth * win.notchScale - (6 + slot * (root.idleHeight + 6) + extra) * win.notchScale - width * (1 + win.notchScale) / 2
+             : win.restWidth * win.notchScale + (6 + slot * (root.idleHeight + 6) + extra) * win.notchScale - width * (1 - win.notchScale) / 2)
+          : win.pillCenter + win.restWidth * win.notchScale / 2 + 6 * win.notchScale - width * (1 - win.notchScale) / 2
         readonly property real notchY: win.notchTop - height * (1 - win.notchScale) / 2
         y: root.bottomEdge ? win.height - height - (docked ? (root.atCorner ? 0 : root.pillTop) + 30 - height / 2 : notched ? notchY : root.pillTop) : (docked ? (root.atCorner ? 0 : root.pillTop) + 30 - height / 2 : notched ? notchY : root.pillTop)
         // Follow the pill's moving center directly while animating only the
@@ -1205,21 +1242,28 @@ ShellRoot {
           font.family: root.glyphFont
           font.pixelSize: sat.docked ? 12 : 14
         }
-        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        HoverHandler {
+          id: satHover
+          enabled: sat.shown
+          cursorShape: Qt.PointingHandCursor
+          onHoveredChanged: if (sat.hoverIsland) win.hoverChanged()
+        }
         TapHandler { enabled: sat.shown || sat.docked; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: sat.clicked() }
       }
       Satellite {
         id: satCaffeine
         on: root.stayAwake
+        hoverIsland: true
+        inNotch: root.atCorner
         slot: 0
-        dockX: win.quickScreenX + quickFull.caffeineX
         glyph: "󰅶"
         onClicked: root.toggleCaffeine()
       }
       Satellite {
         id: satDnd
         on: root.dnd
-        dockX: win.quickScreenX + quickFull.dndX
+        hoverIsland: true
+        inNotch: root.atCorner
         slot: root.stayAwake ? 1 : 0
         glyph: "󰂛"
         glyphColor: root.subColor
@@ -1586,18 +1630,7 @@ ShellRoot {
         Behavior on height { enabled: root.animate; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         Behavior on radius { enabled: root.animate; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
-        HoverHandler {
-          onHoveredChanged: {
-            root.wsHovered = hovered
-            root.pillHovered = hovered
-            if (hovered) { playerLeaveTimer.stop(); playerHoverTimer.restart() }
-            else { playerHoverTimer.stop(); if (root.playerOpen) playerLeaveTimer.restart() }
-            if (hovered) collapseTimer.stop()
-            else if (root.pinned || root.centerOpen) collapseTimer.restart()
-            if (hovered) { shelfLeave.stop(); shelfIdle.stop() }
-            else if (root.shelfOpen) shelfLeave.restart()
-          }
-        }
+        HoverHandler { id: pillHover; onHoveredChanged: win.hoverChanged() }
         // The dashboard closes on its own when the mouse leaves.
         Timer { id: collapseTimer; interval: 450; onTriggered: { root.pinned = false; root.centerOpen = false } }
 
@@ -2160,7 +2193,9 @@ ShellRoot {
         QuickActions {
           id: quickFull
           clockHidden: true
-          satellitesDock: true
+          // The detached indicator fades away on expansion; the real button
+          // remains the sole hover/click target while quick actions are open.
+          satellitesDock: false
           timeText: root.timeText
           displayFont: root.displayFont
           // Keep controls at their final screen position as the pill grows.
